@@ -1,6 +1,6 @@
 # Pulserl
 
-Pulserl is an Erlang client for the Apache Pulsar Pub/Sub messaging system aiming to provide a producer/consumer implementations.
+Pulserl is an Erlang client for the Apache Pulsar Pub/Sub system aiming to provide a producer/consumer implementations.
 
 ### Quick Examples
 
