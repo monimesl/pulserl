@@ -1,0 +1,145 @@
+%%%-------------------------------------------------------------------
+%%% @author Alpha Umaru Shaw <shawalpha5@gmail.com>
+%%% @doc
+%%%
+%%% @end
+%%% Company: Skulup Ltd
+%%% Copyright: (C) 2019
+%%%-------------------------------------------------------------------
+-module(pulserl_utils).
+-author("Alpha Umaru Shaw").
+
+
+-include_lib("kernel/include/inet.hrl").
+
+%% API
+-export([hash_key/2, get_int_env/2, get_env/2, to_binary/1, resolve_uri/1, to_logical_address/2, sock_address_to_string/2, logical_to_physical_addresses/1, random_select/1, now/0]).
+
+
+-export([a_non_negative_int/1, a_positive_int/1, a_boolean/1, a_string/1, a_prop_list/1, assert/2]).
+
+
+hash_key(undefined, Divisor) ->
+	hash_key(<<>>, Divisor);
+hash_key(<<>>, Divisor) ->
+	hash_key(crypto:strong_rand_bytes(8), Divisor);
+hash_key(Key, Divisor) ->
+	erlang:abs(crc32cer:nif(Key)) rem Divisor.
+
+
+sock_address_to_string(Ip, Port) ->
+	inet:ntoa(Ip) ++ ":" ++ integer_to_list(Port).
+
+
+to_logical_address(Hostname, Port) ->
+	maybe_prepend_scheme(Hostname ++ ":" ++ integer_to_list(Port)).
+
+logical_to_physical_addresses(Address) when is_list(Address) ->
+	case resolve_uri(list_to_binary(Address)) of
+		{error, Reason} ->
+			error({bad_address, Reason});
+		{_, Addresses, Port, _} ->
+			[{Addrs, Port} || Addrs <- Addresses]
+	end.
+
+resolve_uri(Uri) ->
+	Uri1 = string:trim(binary_to_list(Uri)),
+	Uri2 = maybe_prepend_scheme(Uri1),
+	case uri_string:parse(Uri2) of
+		{error, _, _} ->
+			{error, invalid_uri};
+		UriMap ->
+			Host = maps:get(host, UriMap),
+			case resolve_address(Host) of
+				{error, _} = Err ->
+					Err;
+				{Hostname, AddressType, Addresses} ->
+					Port = maps:get(port, UriMap),
+					{Hostname, Addresses, Port, AddressType}
+			end
+	end.
+
+resolve_address(Hostname) ->
+	case inet:gethostbyname(Hostname) of
+		{error, _} = Err ->
+			Err;
+		{ok, #hostent{h_name = Host, h_addrtype = AddressType, h_addr_list = Addresses}} ->
+			{Host, AddressType, Addresses}
+	end.
+
+
+maybe_prepend_scheme(Url) ->
+	case string:str(Url, "//") of
+		0 -> "pulsar://" ++ Url;
+		_ -> Url
+	end.
+
+
+random_select([I]) ->
+	I;
+random_select(Ls) ->
+	lists:nth(rand:uniform(length(Ls)), Ls).
+
+
+now() -> erlang:system_time(millisecond).
+
+
+
+to_binary(B) when is_binary(B) ->
+	B;
+to_binary(S) when is_list(S) ->
+	list_to_binary(S);
+to_binary(I) when is_integer(I) ->
+	integer_to_binary(I);
+to_binary(F) when is_float(F) ->
+	float_to_binary(F).
+
+
+get_int_env(Param, Default) when is_integer(Default) ->
+	case get_env(Param, Default) of
+		Val when is_integer(Val) -> Val;
+		Other -> error("Param: ~p must be an integer. Given: ~p", [Param, Other])
+	end.
+
+
+get_env(Param, Default) ->
+	case application:get_env(pulserl, Param) of
+		{ok, Val} -> Val;
+		undefined -> Default
+	end.
+
+
+
+
+a_non_negative_int(V) ->
+	{is_integer(V) andalso V >= 0, "non negative"}.
+
+a_positive_int(V) ->
+	{is_integer(V) andalso V > 0, "positive"}.
+
+a_boolean(V) ->
+	{is_boolean(V) andalso V > 0, "a true or false"}.
+
+a_string(V) ->
+	case io_lib:char_list(V) of
+		true -> {true, undefined};
+		_ -> {false, "a string"}
+	end.
+
+a_prop_list([]) ->
+	{true, undefined};
+a_prop_list(Ls) ->
+	case lists:all(
+		fun({_, _}) ->
+			true;
+			(_) ->
+				false
+		end, Ls) of
+		true -> {true, undefined};
+		_ -> {false, "a propist"}
+	end.
+
+assert(_, {true, _}) ->
+	ok;
+assert({Key, _} = Opt, {_, Suffix}) ->
+	erlang:error({bad_value, "`" ++ atom_to_list(Key) ++ "` must be " ++ Suffix}, [Opt]).

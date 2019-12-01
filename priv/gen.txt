@@ -1,0 +1,1 @@
+gpb_compile:file("pulsar_api.proto", [{i, "priv"}, {o_erl, "src"}, {o_hrl, "include"}]).
