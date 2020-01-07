@@ -16,7 +16,7 @@
 -export([produce/2, produce/3, produce/4]).
 -export([sync_produce/2, sync_produce/3]).
 -export([new_producer/1, new_producer/2]).
--export([new_producer_message/2, new_producer_message/3, new_producer_message/4]).
+-export([new_producer_message/1, new_producer_message/2, new_producer_message/3, new_producer_message/4]).
 
 
 await(Tag) ->
