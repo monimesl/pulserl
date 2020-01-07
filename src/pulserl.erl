@@ -13,9 +13,10 @@
 
 %% API
 -export([await/1, await/2]).
--export([produce/2, produce/3]).
+-export([produce/2, produce/3, produce/4]).
 -export([sync_produce/2, sync_produce/3]).
 -export([new_producer/1, new_producer/2]).
+-export([new_producer_message/2, new_producer_message/3, new_producer_message/4]).
 
 
 await(Tag) ->
@@ -33,14 +34,11 @@ await(Tag, Timeout) ->
 %% @doc
 %%  Asynchronously produce
 %% @end
-produce(PidOrTopic, Value) when is_binary(Value); is_list(Value) ->
-  produce(PidOrTopic, Value, undefined);
-
 produce(PidOrTopic, #prod_message{} = Msg) ->
-  produce(PidOrTopic, Msg, undefined).
+  produce(PidOrTopic, Msg, undefined);
 
-produce(PidOrTopic, Value, Callback) when is_binary(Value); is_list(Value) ->
-  produce(PidOrTopic, undefined, Value, Callback);
+produce(PidOrTopic, Value) ->
+  produce(PidOrTopic, new_producer_message(Value), undefined).
 
 produce(PidOrTopic, #prod_message{} = Msg, Callback) ->
   if is_pid(PidOrTopic) ->
@@ -52,22 +50,21 @@ produce(PidOrTopic, #prod_message{} = Msg, Callback) ->
       end
   end;
 
-produce(PidOrTopic, Key, Value) when is_binary(Value); is_list(Value) ->
-  produce(PidOrTopic, Key, Value, undefined).
+produce(PidOrTopic, Value, Callback) ->
+  produce(PidOrTopic, new_producer_message(Value), Callback).
 
-produce(PidOrTopic, Key, Value, Callback) when is_binary(Value); is_list(Value) ->
-  Key2 = case Key of undefined -> <<>>; _ -> iolist_to_binary(Key) end,
-  produce(PidOrTopic, #prod_message{key = Key2, value = iolist_to_binary(Value)}, Callback).
+produce(PidOrTopic, Key, Value, Callback) ->
+  produce(PidOrTopic, new_producer_message(Key, Value), Callback).
 
 
 %% @doc
 %%  Synchronously produce
 %% @end
-sync_produce(PidOrTopic, Value) when is_binary(Value); is_list(Value) ->
-  sync_produce(PidOrTopic, undefined, Value, ?PRODUCE_TIMEOUT);
-
 sync_produce(Pid, #prod_message{} = Msg) ->
-  sync_produce(Pid, Msg, ?PRODUCE_TIMEOUT).
+  sync_produce(Pid, Msg, ?PRODUCE_TIMEOUT);
+
+sync_produce(PidOrTopic, Value) ->
+  sync_produce(PidOrTopic, new_producer_message(Value), ?PRODUCE_TIMEOUT).
 
 sync_produce(PidOrTopic, #prod_message{} = Msg, Timeout) when
   is_integer(Timeout) orelse Timeout == undefined ->
@@ -84,8 +81,7 @@ sync_produce(PidOrTopic, Key, Value) ->
   sync_produce(PidOrTopic, Key, Value, ?PRODUCE_TIMEOUT).
 
 sync_produce(PidOrTopic, Key, Value, Timeout) ->
-  Key2 = case Key of undefined -> <<>>; _ -> iolist_to_binary(Key) end,
-  sync_produce(PidOrTopic, #prod_message{key = Key2, value = iolist_to_binary(Value)}, Timeout).
+  sync_produce(PidOrTopic, new_producer_message(Key, Value), Timeout).
 
 
 %% @doc
@@ -98,6 +94,25 @@ new_producer(TopicName, Options) ->
   Topic = topic_utils:parse(TopicName),
   pulserl_producer:create(Topic, Options).
 
+
+new_producer_message(Value) ->
+  new_producer_message(<<>>, Value).
+
+new_producer_message(Key, Value) ->
+  new_producer_message(Key, Value, []).
+
+new_producer_message(Key, Value, Properties) ->
+  new_producer_message(Key, Value, Properties, erlwater_time:milliseconds()).
+
+new_producer_message(Key, Value, Properties, EventTime) ->
+  Key2 = case Key of undefined -> <<>>; _ -> Key end,
+  #prod_message{
+    key = erlwater:to_binary(Key2),
+    value = erlwater:to_binary(Value),
+    event_time = erlwater:to_integer(EventTime),
+    properties = Properties,
+    replicate = true
+  }.
 
 %%%===================================================================
 %%% application callbacks
