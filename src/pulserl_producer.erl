@@ -29,16 +29,22 @@
   code_change/3]).
 
 
-produce(Pid, #prod_message{} = Message, Timeout) ->
-  ClientRef = erlang:make_ref(),
+produce(Pid, #prod_message{} = Message, Callback) ->
+  {CallerFun, CallReturn} =
+    if is_function(Callback) ->
+      {fun() -> gen_server:call(Pid, {send_message, Callback, Message}) end, ok};
+      true ->
+        ClientRef = erlang:make_ref(),
+        {fun() -> gen_server:call(Pid, {send_message, {self(), ClientRef}, Message}) end, ClientRef}
+    end,
   try
-    case gen_server:call(Pid, {send_message, {self(), ClientRef}, Message}) of
+    case CallerFun() of
       ok ->
-        ClientRef;
+        CallReturn;
       {error, _} = Error ->
         Error;
-      {redirect, SpecificPartitionProducerPid} ->
-        produce(SpecificPartitionProducerPid, Message, Timeout)
+      {redirect, PartitionProducerPid} ->
+        produce(PartitionProducerPid, Message, Callback)
     end
   catch
     _:{timeout, _} ->
@@ -284,6 +290,7 @@ choose_partition_producer(Key, State) ->
   dict:find(Partition, State#state.partition_to_child).
 
 
+%% @Todo add logic for blocking on queue full
 may_be_produce_message(Message, From, State) ->
   Request = {From, Message},
   if State#state.batch_enable ->
@@ -405,9 +412,14 @@ send_replies(Reply, Requests, State) ->
   State.
 
 
-send_send_reply({Pid, Tag}, Reply) ->
+send_send_reply(Client, Reply) ->
   try
-    Pid ! {Tag, Reply}
+    case Client of
+      {Pid, Tag} ->
+        Pid ! {Tag, Reply};
+      Fun when is_function(Fun) ->
+        apply(Fun, [Reply])
+    end
   catch
     _:Reason ->
       error_logger:error_msg("Error(~p) on replying to "

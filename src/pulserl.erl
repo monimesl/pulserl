@@ -34,28 +34,30 @@ await(Tag, Timeout) ->
 %%  Asynchronously produce
 %% @end
 produce(PidOrTopic, Value) when is_binary(Value); is_list(Value) ->
-  produce(PidOrTopic, undefined, Value, ?PRODUCE_TIMEOUT);
+  produce(PidOrTopic, Value, undefined);
 
 produce(PidOrTopic, #prod_message{} = Msg) ->
-  produce(PidOrTopic, Msg, ?PRODUCE_TIMEOUT).
+  produce(PidOrTopic, Msg, undefined).
 
-produce(PidOrTopic, #prod_message{} = Msg, Timeout) when
-  is_integer(Timeout) orelse Timeout == undefined ->
+produce(PidOrTopic, Value, Callback) when is_binary(Value); is_list(Value) ->
+  produce(PidOrTopic, undefined, Value, Callback);
+
+produce(PidOrTopic, #prod_message{} = Msg, Callback) ->
   if is_pid(PidOrTopic) ->
-    pulserl_producer:produce(PidOrTopic, Msg, Timeout);
+    pulserl_producer:produce(PidOrTopic, Msg, Callback);
     true ->
       case instance_provider:singleton_producer(PidOrTopic, []) of
-        {ok, Pid} -> produce(Pid, Msg, Timeout);
+        {ok, Pid} -> produce(Pid, Msg, Callback);
         Other -> Other
       end
   end;
 
 produce(PidOrTopic, Key, Value) when is_binary(Value); is_list(Value) ->
-  produce(PidOrTopic, Key, Value, ?PRODUCE_TIMEOUT).
+  produce(PidOrTopic, Key, Value, undefined).
 
-produce(PidOrTopic, Key, Value, Timeout) ->
+produce(PidOrTopic, Key, Value, Callback) when is_binary(Value); is_list(Value) ->
   Key2 = case Key of undefined -> <<>>; _ -> iolist_to_binary(Key) end,
-  produce(PidOrTopic, #prod_message{key = Key2, value = iolist_to_binary(Value)}, Timeout).
+  produce(PidOrTopic, #prod_message{key = Key2, value = iolist_to_binary(Value)}, Callback).
 
 
 %% @doc
