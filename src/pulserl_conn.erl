@@ -337,7 +337,6 @@ reconnect_process(State) ->
     _ -> schedule_reconnect_process(State)
   end.
 
-
 create_connection(#state{logical_address = LogicalAddress} = State) ->
   Addresses = pulserl_utils:logical_to_physical_addresses(LogicalAddress),
   connect_to_brokers(State, Addresses).

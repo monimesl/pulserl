@@ -13,7 +13,7 @@
 -include_lib("kernel/include/inet.hrl").
 
 %% API
--export([hash_key/2, get_int_env/2, get_env/2, to_binary/1, resolve_uri/1, to_logical_address/2, sock_address_to_string/2, logical_to_physical_addresses/1, random_select/1, now/0]).
+-export([hash_key/2, get_int_env/2, get_env/2, resolve_uri/1, to_logical_address/2, sock_address_to_string/2, logical_to_physical_addresses/1]).
 
 
 -export([a_non_negative_int/1, a_positive_int/1, a_boolean/1, a_string/1, a_prop_list/1, assert/2]).
@@ -75,41 +75,12 @@ maybe_prepend_scheme(Url) ->
   end.
 
 
-random_select([I]) ->
-  I;
-random_select(Ls) ->
-  lists:nth(rand:uniform(length(Ls)), Ls).
-
-
-now() -> erlang:system_time(millisecond).
-
-
-
-to_binary(B) when is_binary(B) ->
-  B;
-to_binary(S) when is_list(S) ->
-  list_to_binary(S);
-to_binary(I) when is_integer(I) ->
-  integer_to_binary(I);
-to_binary(F) when is_float(F) ->
-  float_to_binary(F).
-
-
 get_int_env(Param, Default) when is_integer(Default) ->
-  case get_env(Param, Default) of
-    Val when is_integer(Val) -> Val;
-    Other -> error("Param: ~p must be an integer. Given: ~p", [Param, Other])
-  end.
+  erlwater_env:get_int_env(pulserl, Param, Default).
 
 
 get_env(Param, Default) ->
-  case application:get_env(pulserl, Param) of
-    {ok, Val} -> Val;
-    undefined -> Default
-  end.
-
-
-
+  erlwater_env:get_env(pulserl, Param, Default).
 
 a_non_negative_int(V) ->
   {is_integer(V) andalso V >= 0, "non negative"}.

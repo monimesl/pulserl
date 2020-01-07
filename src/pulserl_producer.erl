@@ -57,7 +57,7 @@ sync_produce(Pid, #prod_message{} = Message, Timeout) ->
       sync_produce(SpecificPartitionProducer, Message, Timeout);
     ok ->
       receive
-        {Reply, ClientRef} ->
+        {ClientRef, Reply} ->
           erlang:demonitor(MonitorRef, [flush]),
           Reply;
         {'DOWN', MonitorRef, process, _Pid, Reason} ->
@@ -167,13 +167,8 @@ init([#topic{} = Topic, Opts]) ->
     {error, Reason} ->
       {stop, Reason};
     NewState ->
-      case topic_utils:is_partitioned(Topic) of
-        false ->
-          ets:insert(producers, {topic_utils:to_string(Topic), self()}),
-          {ok, NewState};
-        _ ->
-          {ok, NewState}
-      end
+      erlang:send(instance_provider, {producer_up, self(), Topic}),
+      {ok, NewState}
   end.
 
 
@@ -244,7 +239,7 @@ handle_info({timeout, _TimerRef, send_batch},
   end;
 
 %% Last reinitialization failed. Still trying..
-handle_info({timeout, _TimerRef, try_reinitialize}, State) ->
+handle_info(try_reinitialize, State) ->
   {noreply, try_reinitialize(State)};
 
 
@@ -272,7 +267,7 @@ handle_info(Info, State) ->
 
 
 terminate(_Reason, #state{topic = Topic} = _State) ->
-  ets:delete_object(producers, {topic_utils:to_string(Topic), self()}),
+  erlang:send(instance_provider, {producer_down, self(), Topic}),
   ok.
 
 
@@ -346,7 +341,7 @@ new_send(ProducerId, ProducerName, SequenceId, PartitionKey, EventTime, NumMessa
     sequence_id = SequenceId,
     producer_name = ProducerName,
     partition_key = PartitionKey,
-    publish_time = pulserl_utils:now(),
+    publish_time = erlwater_time:milliseconds(),
     uncompressed_size = byte_size(Payload),
     num_messages_in_batch = NumMessages %% Must be `undefined` for non-batch messages
   },

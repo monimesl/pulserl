@@ -44,7 +44,7 @@ produce(PidOrTopic, #prod_message{} = Msg, Timeout) when
   if is_pid(PidOrTopic) ->
     pulserl_producer:produce(PidOrTopic, Msg, Timeout);
     true ->
-      case get_producer(PidOrTopic, []) of
+      case instance_provider:singleton_producer(PidOrTopic, []) of
         {ok, Pid} -> produce(Pid, Msg, Timeout);
         Other -> Other
       end
@@ -72,8 +72,8 @@ sync_produce(PidOrTopic, #prod_message{} = Msg, Timeout) when
   if is_pid(PidOrTopic) ->
     pulserl_producer:sync_produce(PidOrTopic, Msg, Timeout);
     true ->
-      case get_producer(PidOrTopic, []) of
-        {ok, Pid} -> produce(Pid, Msg, Timeout);
+      case instance_provider:singleton_producer(PidOrTopic, []) of
+        {ok, Pid} -> sync_produce(Pid, Msg, Timeout);
         Other -> Other
       end
   end;
@@ -96,17 +96,6 @@ new_producer(TopicName, Options) ->
   Topic = topic_utils:parse(TopicName),
   pulserl_producer:create(Topic, Options).
 
-
-get_producer(TopicName, Options) ->
-  Topic = topic_utils:parse(TopicName),
-  case ets:lookup(producers, topic_utils:to_string(Topic)) of
-    [] -> pulserl_producer:create(Topic, Options);
-    [{_, Pid}] -> {ok, Pid};
-    Prods ->
-      Pos = rand:uniform(length(Prods)),
-      {_, Pid} = lists:nth(Pos, Prods),
-      {ok, Pid}
-  end.
 
 %%%===================================================================
 %%% application callbacks

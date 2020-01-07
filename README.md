@@ -9,7 +9,7 @@ Pulserl is an Erlang client for the Apache Pulsar Pub/Sub system aiming to provi
 The examples assume you have a running Pulsar broker at `localhost:6650`, a topic called `test-topic` (can be partitioned or not) and `rebar3` installed.
 
 ```
-  git clone https://github.com/alphashaw/pulserl.git
+  git clone https://github.com/skulup/pulserl.git
   cd pulserl
   rebar3 compile
   rebar3 shell

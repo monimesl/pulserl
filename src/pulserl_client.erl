@@ -54,6 +54,7 @@
 %%% API
 %%%===================================================================
 
+
 get_broker_connection(LogicalAddress) when is_binary(LogicalAddress) ->
   get_broker_connection(binary_to_list(LogicalAddress));
 get_broker_connection(LogicalAddress) when is_list(LogicalAddress) ->
@@ -222,7 +223,7 @@ discover_address(Topic, Command, ConnPid, State) when is_list(Topic) ->
       proxy_through_service_url = ProxyThroughServiceUrl} ->
       case ProxyThroughServiceUrl of
         true ->
-          {pulserl_utils:random_select(State#state.service_urls), State};
+          {erlwater_collection:random_select(State#state.service_urls), State};
         _ ->
           {chose_broker_url(BrokerServiceUrl, BrokerServiceUrlTls, State), State}
       end;
@@ -298,7 +299,7 @@ chose_broker_url(PlainUrl, TlsUrl, State) ->
   end.
 
 parse_and_resolve_service_url(ServiceUrl) ->
-  ServiceUrl2 = pulserl_utils:to_binary(ServiceUrl),
+  ServiceUrl2 = erlwater:to_binary(ServiceUrl),
   URIs = binary:split(ServiceUrl2, <<",">>, [global]),
   Ls = lists:map(
     fun(Uri) ->

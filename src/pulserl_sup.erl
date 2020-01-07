@@ -25,6 +25,14 @@ init([]) ->
     period => 1},
   ChildSpecs = [
     #{
+      id => instance_provider,
+      start => {instance_provider, start_link, []},
+      restart => permanent,
+      shutdown => 10000,
+      type => worker,
+      modules => [instance_provider]
+    },
+    #{
       id => pulserl_conn_sup,
       start => {pulserl_conn_sup, start_link, []},
       restart => permanent,
@@ -48,7 +56,6 @@ init([]) ->
     }
   ],
   {ok, {SupFlags, ChildSpecs}}.
-
 
 %% internal functions
 

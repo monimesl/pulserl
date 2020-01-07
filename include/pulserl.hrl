@@ -14,7 +14,7 @@
 
 -record(prod_message, {
 	key :: string(),
-	event_time = pulserl_utils:now() :: integer(),
+	event_time = erlwater_time:milliseconds() :: integer(),
 	properties = [] :: map(),
 	value :: binary(),
 	replicate = true :: binary()
