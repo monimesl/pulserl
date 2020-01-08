@@ -10,7 +10,7 @@
 
 -define(UNDEF, undefined).
 
--define(PRODUCE_TIMEOUT, 5000).
+-define(PRODUCE_TIMEOUT, 10000).
 
 -record(prod_message, {
 	key :: string(),

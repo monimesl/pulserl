@@ -40,9 +40,10 @@ parse(Name) when is_binary(Name) ->
         [Tenant, Namespace, LocalName] ->
           #topic{domain = string(Domain), tenant = string(Tenant),
             namespace = string(Namespace), local = string(LocalName)};
-        [Tenant, Cluster, Namespace, LocalName] ->
+        [Tenant, Cluster, Namespace | LocalName] ->
           #topic{domain = string(Domain), tenant = string(Tenant),
-            cluster = string(Cluster), namespace = string(Namespace), local = string(LocalName)};
+            cluster = string(Cluster), namespace = string(Namespace),
+            local = string(iolist_to_binary(join(LocalName, <<"/">>)))};
         _ ->
           error(bad_topic_name, [CompleteName])
       end;
@@ -77,7 +78,6 @@ to_string(#topic{domain = Domain, cluster = Cluster,
     end,
   binary_to_list(iolist_to_binary(Result)).
 
-
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
@@ -86,3 +86,15 @@ string(B) when is_binary(B) ->
   binary_to_list(B);
 string(S) when is_list(S) ->
   S.
+
+join([], _Separator) ->
+  [];
+join([P], _Separator) ->
+  [P];
+join(Parts, Separator) ->
+  lists:reverse(join2(Parts, Separator, [])).
+
+join2([H | []], _Separator, Acc) ->
+  [H | Acc];
+join2([H | T], Separator, Acc) ->
+  join2(T, Separator, [[H, Separator] | Acc]).
