@@ -17,5 +17,5 @@ The examples assume you have a running Pulsar broker at `localhost:6650`, a topi
   Promise = pulserl:produce(Pid, "Asynchronous produce message").
   pulserl:await(Promise).  %% Wait broker ack
   pulserl:sync_produce(Pid, "Synchronous produce message").
-  ok = pulserl:sync_produce(Pid, "{\"username\": \"1234\", \"name\":\"Johnson\", \"age\": 12, \"height\": 3}").
+  ok = pulserl:sync_produce(Pid, "{\"name\":\"Johnson\", \"age\": 12}").
 ```
