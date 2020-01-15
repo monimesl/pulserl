@@ -15,10 +15,6 @@
 %% API
 -export([hash_key/2, get_int_env/2, get_env/2, resolve_uri/1, to_logical_address/2, sock_address_to_string/2, logical_to_physical_addresses/1]).
 
-
--export([a_non_negative_int/1, a_positive_int/1, a_boolean/1, a_string/1, a_prop_list/1, assert/2]).
-
-
 hash_key(undefined, Divisor) ->
   hash_key(<<>>, Divisor);
 hash_key(<<>>, Divisor) ->
@@ -81,36 +77,3 @@ get_int_env(Param, Default) when is_integer(Default) ->
 
 get_env(Param, Default) ->
   erlwater_env:get_env(pulserl, Param, Default).
-
-a_non_negative_int(V) ->
-  {is_integer(V) andalso V >= 0, "non negative"}.
-
-a_positive_int(V) ->
-  {is_integer(V) andalso V > 0, "positive"}.
-
-a_boolean(V) ->
-  {is_boolean(V) andalso V > 0, "a true or false"}.
-
-a_string(V) ->
-  case io_lib:char_list(V) of
-    true -> {true, undefined};
-    _ -> {false, "a string"}
-  end.
-
-a_prop_list([]) ->
-  {true, undefined};
-a_prop_list(Ls) ->
-  case lists:all(
-    fun({_, _}) ->
-      true;
-      (_) ->
-        false
-    end, Ls) of
-    true -> {true, undefined};
-    _ -> {false, "a propist"}
-  end.
-
-assert(_, {true, _}) ->
-  ok;
-assert({Key, _} = Opt, {_, Suffix}) ->
-  erlang:error({bad_value, "`" ++ atom_to_list(Key) ++ "` must be " ++ Suffix}, [Opt]).

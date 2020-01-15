@@ -83,25 +83,26 @@ create(#topic{} = Topic, Options) ->
 
 
 validate_options(Options) when is_list(Options) ->
+  erlwater_assertions:is_proplist(Options),
   lists:foreach(
-    fun({batch_enable, V} = Opt) ->
-      pulserl_utils:assert(Opt, pulserl_utils:a_boolean(V));
-      ({batch_max_messages, V} = Opt) ->
-        pulserl_utils:assert(Opt, pulserl_utils:a_positive_int(V));
-      ({batch_max_delay_ms, V} = Opt) ->
-        pulserl_utils:assert(Opt, pulserl_utils:a_positive_int(V));
-      ({max_pending_messages, V} = Opt) ->
-        pulserl_utils:assert(Opt, pulserl_utils:a_positive_int(V));
-      ({max_pending_messages_across_partitions, V} = Opt) ->
-        pulserl_utils:assert(Opt, pulserl_utils:a_positive_int(V));
-      ({block_on_full_queue, V} = Opt) ->
-        pulserl_utils:assert(Opt, pulserl_utils:a_boolean(V));
-      ({initial_sequence_id, V} = Opt) ->
-        pulserl_utils:assert(Opt, pulserl_utils:a_non_negative_int(V));
-      ({producer_name, V} = Opt) ->
-        pulserl_utils:assert(Opt, pulserl_utils:a_string(V));
-      ({properties, V} = Opt) ->
-        pulserl_utils:assert(Opt, pulserl_utils:a_prop_list(V));
+    fun({batch_enable, _} = Opt) ->
+      erlwater_assertions:is_boolean(Opt);
+      ({block_on_full_queue, _V} = Opt) ->
+        erlwater_assertions:is_boolean(Opt);
+      ({batch_max_messages, _V} = Opt) ->
+        erlwater_assertions:is_positive_int(Opt);
+      ({batch_max_delay_ms, _V} = Opt) ->
+        erlwater_assertions:is_positive_int(Opt);
+      ({max_pending_messages, _V} = Opt) ->
+        erlwater_assertions:is_positive_int(Opt);
+      ({max_pending_messages_across_partitions, _V} = Opt) ->
+        erlwater_assertions:is_positive_int(Opt);
+      ({initial_sequence_id, _V} = Opt) ->
+        erlwater_assertions:is_non_negative_int(Opt);
+      ({producer_name, _V} = Opt) ->
+        erlwater_assertions:is_string(Opt);
+      ({properties, _V} = Opt) ->
+        erlwater_assertions:is_proplist(Opt);
       (Opt) ->
         error(unknown_producer_options, [Opt])
     end,
