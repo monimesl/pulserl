@@ -422,9 +422,9 @@ send_send_reply(Client, Reply) ->
         apply(Fun, [Reply])
     end
   catch
-    _:Reason ->
+    _:Reason:Stacktrace ->
       error_logger:error_msg("Error(~p) on replying to "
-      "the client.", [Reason])
+      "the client.", [{Reason, Stacktrace}])
   end.
 
 add_to_pending_or_blocking(Request, #state{
