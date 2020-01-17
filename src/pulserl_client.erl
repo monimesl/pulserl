@@ -196,7 +196,7 @@ get_partitioned_topic_meta(Topic,
     #state{service_lookup_connection = SrvConnPid} = State) ->
   TopicName = topic_utils:to_string(Topic),
   Command = commands:cmd_partitioned_topic_meta(TopicName),
-  case pulserl_conn:sync_send(SrvConnPid, Command) of
+  case pulserl_conn:send_simple_command(SrvConnPid, Command) of
     #'CommandPartitionedTopicMetadataResponse'{
       response = 'Failed', error = Error, message = Msg} ->
       {{error, {Error, Msg}}, State};
@@ -215,8 +215,8 @@ find_broker_address(Topic,
   discover_address(TopicName, Command, SrvConnPid, State).
 
 
-discover_address(Topic, Command, ConnPid, State) when is_list(Topic) ->
-  case pulserl_conn:sync_send(ConnPid, Command) of
+discover_address(Topic, Command, ConnPid, State) ->
+  case pulserl_conn:send_simple_command(ConnPid, Command) of
     #'CommandLookupTopicResponse'{response = 'Connect',
       brokerServiceUrl = BrokerServiceUrl,
       brokerServiceUrlTls = BrokerServiceUrlTls,
@@ -358,7 +358,7 @@ update_physical_address_2_connections_map(PhysicalAddress, #cached_conn{} = Conn
     end,
     [Conn],
     State#state.physical_address_2_connection),
-  error_logger:info_msg("PhysicalAddressConns Updated. Before: ~p, Now: ~p",
+  error_logger:info_msg("Pulsar connections updated. Before: ~p. Now: ~p",
     [State#state.physical_address_2_connection, PhysicalAddress2Conns]),
   State#state{physical_address_2_connection = PhysicalAddress2Conns}.
 

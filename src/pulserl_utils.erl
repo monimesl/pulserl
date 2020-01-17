@@ -12,8 +12,13 @@
 
 -include_lib("kernel/include/inet.hrl").
 
+-export([new_message_id/3]).
+
 %% API
 -export([hash_key/2, get_int_env/2, get_env/2, resolve_uri/1, to_logical_address/2, sock_address_to_string/2, logical_to_physical_addresses/1]).
+
+new_message_id(Topic, LedgerId, EntryId) ->
+  #{topic => topic_utils:to_string(Topic), ledger_id => LedgerId, entry_id => EntryId}.
 
 hash_key(undefined, Divisor) ->
   hash_key(<<>>, Divisor);

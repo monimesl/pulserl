@@ -6,7 +6,7 @@
 %%% Company: Skulup Ltd
 %%% Copyright: (C) 2019
 %%%-------------------------------------------------------------------
--module(pulserl_producer_sup).
+-module(pulserl_consumer_sup).
 -author("Alpha Umaru Shaw").
 
 -behaviour(supervisor).
@@ -25,20 +25,17 @@ start_link() ->
 
 
 init([]) ->
-  ets:new(pulserl_producers, [named_table, bag,
-    public, {read_concurrency, true}, {write_concurrency, true}]),
-
   SupFlags = #{strategy => simple_one_for_one,
     intensity => 1000,
     period => 3600},
   ChildSpecs = [
     #{
-      id => pulserl_producer,
-      start => {pulserl_producer, start_link, []},
+      id => pulserl_consumer,
+      start => {pulserl_consumer, start_link, []},
       restart => transient,
       shutdown => 10000,
       type => worker,
-      modules => [pulserl_producer]
+      modules => [pulserl_consumer]
     }
   ],
   {ok, {SupFlags, ChildSpecs}}.

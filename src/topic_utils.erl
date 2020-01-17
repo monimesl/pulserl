@@ -66,8 +66,13 @@ new_partition(#topic{} = Parent, Index)
   Pt#topic{parent = Parent}.
 
 new_partition_str(#topic{} = Topic, Index) ->
-  to_string(Topic) ++ "-partition-" ++ integer_to_list(Index).
+  iolist_to_binary([to_string(Topic), "-partition-", integer_to_list(Index)]).
 
+to_string(Topic) when is_binary(Topic) ->
+  Topic;
+
+to_string(Topic) when is_list(Topic) ->
+  iolist_to_binary(Topic);
 
 to_string(#topic{domain = Domain, cluster = Cluster,
   tenant = Tenant, namespace = Namespace, local = LocalName}) ->
@@ -76,7 +81,7 @@ to_string(#topic{domain = Domain, cluster = Cluster,
       undefined -> [Domain, "://", Tenant, "/", Namespace, "/", LocalName];
       Cl when is_list(Cl) -> [Domain, "://", Tenant, "/", Cl, "/", Namespace, "/", LocalName]
     end,
-  binary_to_list(iolist_to_binary(Result)).
+  iolist_to_binary(Result).
 
 %%%===================================================================
 %%% Internal functions

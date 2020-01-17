@@ -36,7 +36,7 @@ new_producer(TopicName, Options) ->
 
 singleton_producer(TopicName, Options) ->
   Topic = topic_utils:parse(TopicName),
-  case ets:lookup(producers, topic_utils:to_string(Topic)) of
+  case ets:lookup(pulserl_producers, topic_utils:to_string(Topic)) of
     [] ->
       gen_server:call(?SERVER, {new_producer, Topic, Options}, 32000);
     Prods ->
@@ -54,7 +54,7 @@ init([]) ->
   {ok, #state{}}.
 
 handle_call({new_producer, Topic, Options}, _From, State) ->
-  case ets:lookup(producers, topic_utils:to_string(Topic)) of
+  case ets:lookup(pulserl_producers, topic_utils:to_string(Topic)) of
     [] ->
       {reply, ?MODULE:new_producer(Topic, Options), State};
     Prods ->
@@ -71,13 +71,13 @@ handle_cast(_Request, State) ->
 handle_info({producer_up, ProducerPid, Topic}, State) ->
   case topic_utils:is_partitioned(Topic) of
     false ->
-      ets:insert(producers, {topic_utils:to_string(Topic), ProducerPid});
+      ets:insert(pulserl_producers, {topic_utils:to_string(Topic), ProducerPid});
     _ ->
       ok
   end,
   {noreply, State};
 handle_info({producer_down, ProducerPid, Topic}, State) ->
-  ets:delete_object(producers, {topic_utils:to_string(Topic), ProducerPid}),
+  ets:delete_object(pulserl_producers, {topic_utils:to_string(Topic), ProducerPid}),
   {noreply, State};
 
 handle_info(Info, State) ->

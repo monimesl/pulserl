@@ -17,7 +17,7 @@
 
 %% API
 -export([create/2, produce/3, sync_produce/3]).
--export([start_link/2, stop/1]).
+-export([start_link/2, inform/2, close/2]).
 
 
 %% gen_server callbacks
@@ -78,8 +78,8 @@ sync_produce(Pid, #prod_message{} = Message, Timeout) ->
 
 
 create(#topic{} = Topic, Options) ->
-  Options = validate_options(Options),
-  supervisor:start_child(pulserl_producer_sup, [Topic, Options]).
+  Options2 = validate_options(Options),
+  supervisor:start_child(pulserl_producer_sup, [Topic, Options2]).
 
 
 validate_options(Options) when is_list(Options) ->
@@ -114,9 +114,11 @@ validate_options(Options) when is_list(Options) ->
 start_link(#topic{} = Topic, Options) ->
   gen_server:start_link(?MODULE, [Topic, Options], []).
 
+inform(Pid, Information) ->
+  gen_server:cast(Pid, Information).
 
-stop(Pid) ->
-  gen_server:cast(Pid, stop).
+close(Pid, Restart) ->
+  gen_server:cast(Pid, {close, Restart}).
 
 
 %%%===================================================================
@@ -124,6 +126,9 @@ stop(Pid) ->
 %%%===================================================================
 
 -define(STATE_READY, ready).
+
+-define(ERROR_PRODUCER_CLOSED, {error, producer_closed}).
+-define(ERROR_PRODUCER_NOT_READY, {error, producer_not_ready}).
 
 -record(state, {
   state,
@@ -180,7 +185,7 @@ init([#topic{} = Topic, Opts]) ->
 
 
 handle_call({send_message, _ClientFrom, _}, _From, #state{state = undefined} = State) ->
-  {reply, {error, no_connection}, State};
+  {reply, ?ERROR_PRODUCER_NOT_READY, State};
 
 handle_call({send_message, _ClientFrom, #prod_message{key = Key}}, _From,
     #state{partition_count = PartitionCount} = State)
@@ -191,45 +196,51 @@ handle_call({send_message, _ClientFrom, #prod_message{key = Key}}, _From,
   Replay =
     case choose_partition_producer(Key, State) of
       {ok, Pid} -> {redirect, Pid};
-      _ -> {error, no_connection}
+      _ -> ?ERROR_PRODUCER_NOT_READY
     end,
   {reply, Replay, State};
 
 handle_call({send_message, ClientFrom, Message}, _From, State) ->
   {Reply, NewState} = may_be_produce_message(Message, ClientFrom, State),
   {reply, Reply, NewState};
-handle_call(_Request, _From, State) ->
+handle_call(Request, _From, State) ->
+  error_logger:warning_msg("Unexpected call: ~p in ~p(~p)", [Request, ?MODULE, self()]),
   {reply, ok, State}.
 
+%% The producer was ask to close
+handle_cast({on_command, _, #'CommandCloseProducer'{}}, State) ->
+  State2 = send_reply_to_all_waiters(?ERROR_PRODUCER_CLOSED, State),
+  {noreply, try_reinitialize(State2#state{state = undefined})};
 
-handle_cast(stop, State) ->
-  State2 = stop_children(State),
-  State3 = send_reply_to_all({error, producer_closed}, State2),
-  {stop, normal, stop_children(State3)};
+
+handle_cast({close, Restart}, State) ->
+  case Restart of
+    true ->
+      error_logger:info_msg("Temporariliy closing producer: ~p",
+        [topic_utils:to_string(State#state.topic)]),
+      State2 = close_children(State, Restart),
+      State3 = send_reply_to_all_waiters(?ERROR_PRODUCER_CLOSED, State2),
+      {noreply, try_reinitialize(State3#state{state = undefined})};
+    _ ->
+      error_logger:info_msg("Producer(~p) at: ~p is permanelty closing",
+        [self(), topic_utils:to_string(State#state.topic)]),
+      State2 = send_reply_to_all_waiters(?ERROR_PRODUCER_CLOSED, State),
+      {close, normal, close_children(State2, Restart)}
+  end;
+
+handle_cast({ack_received, SequenceId, LedgerId, EntryId},
+    #state{topic = Topic} = State) ->
+  Reply = pulserl_utils:new_message_id(Topic, LedgerId, EntryId),
+  {noreply, send_reply_to_producer_waiter(SequenceId, Reply, State)};
+
+handle_cast({send_error, SequenceId, {error, _} = Error}, State) ->
+  {noreply, send_reply_to_producer_waiter(SequenceId, Error, State)};
+
 
 handle_cast(Request, State) ->
   error_logger:warning_msg("Unexpected Cast: ~p", [Request]),
   {noreply, State}.
 
-
-handle_info({on_command, _,
-  #'CommandSendReceipt'{sequence_id = ResponseSeqId}},
-    #state{pending_requests = PendingRequests} = State) ->
-  {SucceededPendingRequests, PendingRequests2} = dict:take(ResponseSeqId, PendingRequests),
-  State2 = send_replies(ok, SucceededPendingRequests, State),
-  {noreply, State2#state{pending_requests = PendingRequests2}};
-
-handle_info({on_command, _,
-  #'CommandSendError'{sequence_id = ResponseSeqId, error = Error}},
-    #state{pending_requests = PendingRequests} = State) ->
-  {SucceededPendingRequests, PendingRequests2} = dict:take(ResponseSeqId, PendingRequests),
-  State2 = send_replies({error, Error}, SucceededPendingRequests, State),
-  {stop, Error, State2#state{pending_requests = PendingRequests2}};
-
-%% The producer was ask to close
-handle_info({on_command, _, #'CommandCloseProducer'{}}, State) ->
-  State2 = send_reply_to_all({error, producer_closed}, State),
-  {noreply, try_reinitialize(State2#state{state = undefined})};
 
 handle_info({timeout, _TimerRef, send_batch},
     #state{batch_enable = true,
@@ -249,12 +260,27 @@ handle_info({timeout, _TimerRef, send_batch},
 handle_info(try_reinitialize, State) ->
   {noreply, try_reinitialize(State)};
 
+%% Our connection is down. We stop the scheduled
+%% re-initialization attempts and try again after
+%% a `connection_up` message
+handle_info(connection_down, State) ->
+  if State#state.re_init_timer /= undefined ->
+    erlang:cancel_timer(State#state.re_init_timer),
+    {noreply, State#state{state = undefined, re_init_timer = undefined}};
+    true ->
+      {noreply, State}
+  end;
+
+%% Try re-initialization again
+handle_info(connection_up, State) ->
+  {noreply, try_reinitialize(State)};
+
 
 handle_info({'DOWN', _ConnMonitorRef, process, _Pid, _},
     #state{} = State) ->
   %% This hardly happens as we design the
   %% connection to avoid frequent death
-  {stop, normal, send_reply_to_all({error, producer_closed}, State)};
+  {stop, normal, send_reply_to_all_waiters(?ERROR_PRODUCER_CLOSED, State)};
 
 handle_info({'EXIT', Pid, Reason}, State) ->
   case Reason of
@@ -284,6 +310,11 @@ code_change(_OldVsn, State, _Extra) ->
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
+send_reply_to_producer_waiter(SequenceId, Reply,
+    #state{pending_requests = PendingRequests} = State) ->
+  {SucceededPendingRequests, PendingRequests2} = dict:take(SequenceId, PendingRequests),
+  State2 = send_replies_to_waiters(Reply, SucceededPendingRequests, State),
+  State2#state{pending_requests = PendingRequests2}.
 
 
 choose_partition_producer(Key, State) ->
@@ -340,33 +371,20 @@ next_request_batch(#state{batch_requests = BatchRequests} = State, Size) ->
       {[], BatchRequests}
   end.
 
-
-new_send(ProducerId, ProducerName, SequenceId, PartitionKey, EventTime, NumMessages, Payload) ->
-  SendCmd = #'CommandSend'{
-    sequence_id = SequenceId, producer_id = ProducerId},
-  Metadata = #'MessageMetadata'{
-    event_time = EventTime,
-    sequence_id = SequenceId,
-    producer_name = ProducerName,
-    partition_key = PartitionKey,
-    publish_time = erlwater_time:milliseconds(),
-    uncompressed_size = byte_size(Payload),
-    num_messages_in_batch = NumMessages %% Must be `undefined` for non-batch messages
-  },
-  {SendCmd, Metadata}.
-
-
-send_message({_, #prod_message{value = Payload} = Msg} = Request, #state{sequence_id = SeqId} = State) ->
-  {SendCmd, Metadata} = new_send(State#state.producer_id,
+send_message({_, #prod_message{value = Payload} = Msg} = Request,
+    #state{connection = Cnx, sequence_id = SeqId} = State) ->
+  {SendCmd, Metadata} = commands:new_send(State#state.producer_id,
     State#state.producer_name, SeqId, Msg#prod_message.key, Msg#prod_message.event_time,
     %% `num_messages_in_batch` must be undefined for non-batch messages
     undefined, Payload),
   PendingRequests = dict:store(SeqId, [Request], State#state.pending_requests),
   NewState = State#state{sequence_id = SeqId + 1, pending_requests = PendingRequests},
-  async_send_payload_command(SendCmd, Metadata, Payload, NewState).
+  pulserl_conn:send_payload_command(Cnx, SendCmd, Metadata, Payload),
+  NewState.
 
 
 send_batch_messages(Batch, #state{
+  connection = Cnx,
   sequence_id = SeqId,
   producer_id = ProducerId,
   producer_name = ProducerName} = State) ->
@@ -384,48 +402,46 @@ send_batch_messages(Batch, #state{
       SerializedSingleMsgMeta = pulsar_api:encode_msg(SingleMsgMeta),
       SerializedSingleMsgMetaSize = byte_size(SerializedSingleMsgMeta),
       BatchBuffer1 = erlang:iolist_to_binary([BatchBuffer0,
-        commands:encode_to_4bytes(SerializedSingleMsgMetaSize),
+        commands:to_4bytes(SerializedSingleMsgMetaSize),
         SerializedSingleMsgMeta, Payload
       ]),
       {SeqId + 1, BatchBuffer1}
     end, {SeqId, <<>>}, Batch),
   [{_, FirstMsg} | _] = Batch,
-  {SendCmd, Metadata} = new_send(ProducerId, ProducerName, FinalSeqId,
+  {SendCmd, Metadata} = commands:new_send(ProducerId, ProducerName, FinalSeqId,
     undefined, FirstMsg#prod_message.event_time,
     length(Batch), BatchPayload
   ),
   PendingRequests = dict:store(FinalSeqId, Batch, State#state.pending_requests),
   NewState = State#state{sequence_id = FinalSeqId, pending_requests = PendingRequests},
-  async_send_payload_command(SendCmd, Metadata, BatchPayload, NewState).
+  pulserl_conn:send_payload_command(Cnx, SendCmd, Metadata, BatchPayload),
+  NewState.
 
 
-send_reply_to_all(Reply, State) ->
+send_reply_to_all_waiters(Reply, State) ->
   BatchReqs = queue:to_list(State#state.batch_requests),
   PendingReqs = [From || {_, From} <- dict:to_list(State#state.pending_requests)],
-  send_replies(Reply, PendingReqs ++ BatchReqs, State).
+  send_replies_to_waiters(Reply, PendingReqs ++ BatchReqs, State).
 
 
-send_replies(Reply, Requests, State) ->
+send_replies_to_waiters(Reply, Requests, State) ->
   lists:foreach(
     fun({Client, _}) ->
-      send_send_reply(Client, Reply)
+      try
+        case Client of
+          {Pid, Tag} ->
+            Pid ! {Tag, Reply};
+          Fun when is_function(Fun) ->
+            apply(Fun, [Reply])
+        end
+      catch
+        _:Reason:Stacktrace ->
+          error_logger:error_msg("Error(~p) on replying to "
+          "the client.", [{Reason, Stacktrace}])
+      end
     end, Requests),
   State.
 
-
-send_send_reply(Client, Reply) ->
-  try
-    case Client of
-      {Pid, Tag} ->
-        Pid ! {Tag, Reply};
-      Fun when is_function(Fun) ->
-        apply(Fun, [Reply])
-    end
-  catch
-    _:Reason:Stacktrace ->
-      error_logger:error_msg("Error(~p) on replying to "
-      "the client.", [{Reason, Stacktrace}])
-  end.
 
 add_to_pending_or_blocking(Request, #state{
   batch_requests = BatchRequests,
@@ -459,14 +475,14 @@ enqueue_request(Request, #state{batch_requests = BatchRequests} = State) ->
 
 
 update_pending_messages_count_across_partitions(
-    #state{topic = Topic}, Inc) ->
+    #state{topic = Topic}, Increment) ->
   if Topic#topic.parent /= undefined ->
     %% this is a producer to one of the partition
     TopicName = topic_utils:to_string(Topic#topic.parent),
     Update =
-      if Inc < 0 ->
-        {2, Inc, 0, 0};
-        true -> {2, Inc}
+      if Increment < 0 ->
+        {2, Increment, 0, 0};
+        true -> {2, Increment}
       end,
     ets:update_counter(partition_pending_messages, TopicName, Update, {TopicName, 0});
     true ->
@@ -490,7 +506,7 @@ maybe_inner_producer_exited(ExitedPid, Reason, State) ->
             [topic_utils:new_partition_str(State#state.topic, Partition)]),
           NewState;
         {error, NewReason} = Error ->
-          error_logger:info_msg("Producer to '~s' restart failed. Reason: ~p",
+          error_logger:error_msg("Producer to '~s' restart failed. Reason: ~p",
             [topic_utils:new_partition_str(State#state.topic, Partition), NewReason]),
           Error
       end;
@@ -501,11 +517,13 @@ maybe_inner_producer_exited(ExitedPid, Reason, State) ->
 
 
 try_reinitialize(State) ->
+  Topic = topic_utils:to_string(State#state.topic),
   case initialize(State) of
     {error, Reason} ->
-      error_logger:error_msg("Re-initialization failed: ~p", [Reason]),
+      error_logger:error_msg("Producer: ~p re-initialization failed: ~p", [Topic, Reason]),
       State#state{re_init_timer = erlang:send_after(500, self(), try_reinitialize)};
     NewState ->
+      error_logger:info_msg("Producer: ~p re-initialization completes", [Topic]),
       NewState#state{state = ?STATE_READY}
   end.
 
@@ -572,7 +590,7 @@ create_inner_producers(#state{partition_count = Total} = State) ->
     undefined ->
       {ok, NewState};
     {error, _} = Err ->
-      [pulserl_producer:stop(Pid) || {_, Pid} <- dict:fetch_keys(NewState#state.child_to_partition)],
+      [pulserl_producer:close(Pid, false) || {_, Pid} <- dict:fetch_keys(NewState#state.child_to_partition)],
       Err
   end.
 
@@ -582,7 +600,7 @@ establish_producer(#state{topic = Topic} = State) ->
     topic = topic_utils:to_string(Topic),
     producer_id = State#state.producer_id,
     producer_name = State#state.producer_name},
-  case pulserl_conn:sync_send(
+  case pulserl_conn:send_simple_command(
     State#state.connection, Command
   ) of
     {error, _} = Err ->
@@ -613,12 +631,6 @@ start_batch_timer(#state{batch_max_delay_ms = BatchDelay} = State) ->
     batch_send_timer = erlang:start_timer(BatchDelay, self(), send_batch)
   }.
 
-
-async_send_payload_command(Command, Metadata, Payload,
-    #state{connection = Cnx} = State) ->
-  pulserl_conn:async_send_payload(Cnx, Command, Metadata, Payload), State.
-
-
 create_inner_producer(Index, State) ->
   create_inner_producer(3, Index, State).
 
@@ -640,10 +652,10 @@ create_inner_producer(Retries, Index,
   end.
 
 
-stop_children(State) ->
+close_children(State, Restart) ->
   lists:foreach(
     fun(Pid) ->
-      pulserl_producer:stop(Pid)
+      pulserl_producer:close(Pid, Restart)
     end, dict:fetch_keys(State#state.child_to_partition)),
   State#state{
     child_to_partition = dict:new(),

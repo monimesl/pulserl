@@ -47,6 +47,13 @@ init([]) ->
       modules => [pulserl_producer_sup]
     },
     #{
+      id => pulserl_consumer_sup,
+      start => {pulserl_consumer_sup, start_link, []},
+      restart => permanent,
+      type => supervisor,
+      modules => [pulserl_consumer_sup]
+    },
+    #{
       id => pulserl_client,
       start => {pulserl_client, start_link, [ServiceUrl]},
       restart => permanent,
