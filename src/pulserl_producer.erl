@@ -207,12 +207,15 @@ handle_call(Request, _From, State) ->
   error_logger:warning_msg("Unexpected call: ~p in ~p(~p)", [Request, ?MODULE, self()]),
   {reply, ok, State}.
 
+handle_cast({ack_received, SequenceId, LedgerId, EntryId},
+    #state{topic = Topic} = State) ->
+  Reply = pulserl_utils:new_message_id(Topic, LedgerId, EntryId),
+  {noreply, send_reply_to_producer_waiter(SequenceId, Reply, State)};
+
+handle_cast({send_error, SequenceId, {error, _} = Error}, State) ->
+  {noreply, send_reply_to_producer_waiter(SequenceId, Error, State)};
+
 %% The producer was ask to close
-handle_cast({on_command, _, #'CommandCloseProducer'{}}, State) ->
-  State2 = send_reply_to_all_waiters(?ERROR_PRODUCER_CLOSED, State),
-  {noreply, try_reinitialize(State2#state{state = undefined})};
-
-
 handle_cast({close, Restart}, State) ->
   case Restart of
     true ->
@@ -227,15 +230,6 @@ handle_cast({close, Restart}, State) ->
       State2 = send_reply_to_all_waiters(?ERROR_PRODUCER_CLOSED, State),
       {close, normal, close_children(State2, Restart)}
   end;
-
-handle_cast({ack_received, SequenceId, LedgerId, EntryId},
-    #state{topic = Topic} = State) ->
-  Reply = pulserl_utils:new_message_id(Topic, LedgerId, EntryId),
-  {noreply, send_reply_to_producer_waiter(SequenceId, Reply, State)};
-
-handle_cast({send_error, SequenceId, {error, _} = Error}, State) ->
-  {noreply, send_reply_to_producer_waiter(SequenceId, Error, State)};
-
 
 handle_cast(Request, State) ->
   error_logger:warning_msg("Unexpected Cast: ~p", [Request]),
