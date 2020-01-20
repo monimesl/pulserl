@@ -1,6 +1,6 @@
 # Pulserl - Apache Pulsar client for Erlang/Elixir
 
-Pulserl is an Erlang client for the Apache Pulsar Pub/Sub system aiming to provide a producer/consumer implementations.
+Pulserl is an Erlang client for the Apache Pulsar Pub/Sub system with both producer and consumer implementations.
 
 ### WARNING: Pulserl is currently in progress. Consider current implementations as _beta_
 

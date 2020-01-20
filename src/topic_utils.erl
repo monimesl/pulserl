@@ -37,12 +37,12 @@ parse(Name) when is_binary(Name) ->
     [Domain, Rest] ->
       case binary:split(Rest, <<"/">>, [global]) of
         [Tenant, Namespace, LocalName] ->
-          #topic{domain = string(Domain), tenant = string(Tenant),
-            namespace = string(Namespace), local = string(LocalName)};
+          #topic{domain = Domain, tenant = Tenant,
+            namespace = Namespace, local = LocalName};
         [Tenant, Cluster, Namespace | LocalName] ->
-          #topic{domain = string(Domain), tenant = string(Tenant),
-            cluster = string(Cluster), namespace = string(Namespace),
-            local = string(iolist_to_binary(join(LocalName, <<"/">>)))};
+          #topic{domain = Domain, tenant = Tenant,
+            cluster = Cluster, namespace = Namespace,
+            local = iolist_to_binary(join(LocalName, <<"/">>))};
         _ ->
           error(bad_topic_name, [CompleteName])
       end;
@@ -117,11 +117,6 @@ to_string(#topic{domain = Domain, cluster = Cluster,
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
-
-string(B) when is_binary(B) ->
-  B;
-string(S) when is_list(S) ->
-  list_to_binary(S).
 
 join([], _Separator) ->
   [];
