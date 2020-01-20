@@ -3,15 +3,13 @@
 %%% @doc
 %%%
 %%% @end
-%%% Company: Skulup Ltd
-%%% Copyright: (C) 2019
+%%% Copyright: (C) 2020, Skulup Ltd
 %%%-------------------------------------------------------------------
--author("Alpha Umaru Shaw").
 
--define(PERSISTENT_DOMAIN, "persistent").
--define(NON_PERSISTENT_DOMAIN, "non-persistent").
--define(PUBLIC_TENANT, "public").
--define(DEFAULT_NAMESPACE, "default").
+-define(PERSISTENT_DOMAIN, <<"persistent">>).
+-define(NON_PERSISTENT_DOMAIN, <<"non-persistent">>).
+-define(PUBLIC_TENANT, <<"public">>).
+-define(DEFAULT_NAMESPACE, <<"default">>).
 
 -record(partition_meta, {
 	partitions :: integer()

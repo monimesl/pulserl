@@ -1,6 +1,9 @@
 %%%-------------------------------------------------------------------
-%% @doc pulserl top level supervisor.
-%% @end
+%%% @author Alpha Umaru Shaw <shawalpha5@gmail.com>
+%%% @doc
+%%%
+%%% @end
+%%% Copyright: (C) 2020, Skulup Ltd
 %%%-------------------------------------------------------------------
 
 -module(pulserl_conn_sup).

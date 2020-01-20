@@ -1,6 +1,9 @@
 %%%-------------------------------------------------------------------
-%% @doc pulserl top level supervisor.
-%% @end
+%%% @author Alpha Umaru Shaw <shawalpha5@gmail.com>
+%%% @doc
+%%%
+%%% @end
+%%% Copyright: (C) 2020, Skulup Ltd
 %%%-------------------------------------------------------------------
 
 -module(pulserl_sup).
@@ -25,12 +28,12 @@ init([]) ->
     period => 1},
   ChildSpecs = [
     #{
-      id => instance_provider,
-      start => {instance_provider, start_link, []},
+      id => pulserl_instance_registry,
+      start => {pulserl_instance_registry, start_link, []},
       restart => permanent,
       shutdown => 10000,
       type => worker,
-      modules => [instance_provider]
+      modules => [pulserl_instance_registry]
     },
     #{
       id => pulserl_conn_sup,

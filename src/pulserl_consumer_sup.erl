@@ -3,11 +3,9 @@
 %%% @doc
 %%%
 %%% @end
-%%% Company: Skulup Ltd
-%%% Copyright: (C) 2019
+%%% Copyright: (C) 2020, Skulup Ltd
 %%%-------------------------------------------------------------------
 -module(pulserl_consumer_sup).
--author("Alpha Umaru Shaw").
 
 -behaviour(supervisor).
 
@@ -25,6 +23,9 @@ start_link() ->
 
 
 init([]) ->
+  ets:new(pulserl_consumers, [named_table, bag,
+    public, {read_concurrency, true}, {write_concurrency, true}]),
+
   SupFlags = #{strategy => simple_one_for_one,
     intensity => 1000,
     period => 3600},

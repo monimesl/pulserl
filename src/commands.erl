@@ -3,14 +3,12 @@
 %%% @doc
 %%%
 %%% @end
-%%% Company: Skulup Ltd
-%%% Copyright: (C) 2019
+%%% Copyright: (C) 2020, Skulup Ltd
 %%%-------------------------------------------------------------------
 -module(commands).
--author("Alpha Umaru Shaw").
 
+-include("pulserl.hrl").
 -include("pulsar_api.hrl").
-
 
 -define(CLIENT_VSN, "0.1.0").
 -define(MAGIC_NUMBER, 16#0e01).
@@ -19,10 +17,10 @@
 -define(METADATA_LEN, 4).
 -define(MAGIC_NUMBER_LEN, 2).
 
--export([encode/1, decode/1, new_send/7]).
+-export([encode/1, decode/1, new_send/7, parse_metadata/1]).
 
--export([entry_id/1, ledger_id/1]).
--export([cmd_connect/0, cmd_lookup_topic/2, cmd_partitioned_topic_meta/1]).
+-export([has_messages_in_batch/1, read_size/1]).
+-export([new_connect/0, new_lookup_topic/2, new_partitioned_topic_meta/1, new_ack/2, new_ack/3, new_redeliver_un_acked_messages/2]).
 
 -export([encode/3, wrap_to_base_command/1, get_request_id/1, set_request_id/2, to_4bytes/1, encode_to_2bytes/1]).
 
@@ -39,6 +37,7 @@ encode(InnerCommand) ->
   encode(BaseCmd).
 
 
+%%@Todo Clean this function.
 %% Format = [TOTAL_SIZE(4)] [CMD_SIZE(4)][CMD(~)] [MAGIC_NUMBER(2)][CHECKSUM(4)] [METADATA_SIZE(~)][METADATA(~)] [PAYLOAD(~)]
 encode(InnerCommand, #'MessageMetadata'{} = Meta, Payload) when is_binary(Payload) ->
   BaseCommand = wrap_to_base_command(InnerCommand),
@@ -46,9 +45,6 @@ encode(InnerCommand, #'MessageMetadata'{} = Meta, Payload) when is_binary(Payloa
   CmdSize = byte_size(SerializedCommand),
   Metadata = pulsar_api:encode_msg(Meta),
   MetadataSize = byte_size(Metadata),
-%%  error_logger:info_msg("Magic Number: ~p => ~p", [?MAGIC_NUMBER, encode_to_2bytes(?MAGIC_NUMBER)]),
-%%  error_logger:info_msg("MetadataSize: ~p", [MetadataSize]),
-%%  error_logger:info_msg("Payload: ~p", [Payload]),
   MetadataSize_Metadata_Payload = [to_4bytes(MetadataSize), Metadata, Payload],
   TotalSize = ?CMD_SIZE_LEN + CmdSize + ?MAGIC_NUMBER_LEN + ?CHECKSUM_LEN + ?METADATA_LEN + MetadataSize + byte_size(Payload),
   iolist_to_binary([
@@ -70,7 +66,7 @@ decode(Data) when is_binary(Data) ->
     end,
   %% Sometimes a PING is embedded
   %% together with other type response
-  %% in a `BaseCommand` message
+  %% in a `BaseCommand` message. I've seen it
   ['BaseCommand', _Type | WrappedCommands] =
     lists:filter(
       fun(Val) -> Val /= undefined end,
@@ -78,12 +74,29 @@ decode(Data) when is_binary(Data) ->
     ),
   {hd(WrappedCommands), HeadersAndPayload}.
 
+parse_metadata(HeadersAndPayload) ->
+  case verify_checksum(HeadersAndPayload) of
+    {error, _} = Error ->
+      Error;
+    _ ->
+      <<MetadataSize:32/unsigned-integer, MetadataPayload/binary>> =
+        case has_checksum(HeadersAndPayload) of
+          true ->
+            <<_Checksum:4/binary, Rest/binary>> = HeadersAndPayload,
+            Rest;
+          _ ->
+            HeadersAndPayload
+        end,
+      <<Metadata:MetadataSize/binary, Payload/binary>> = MetadataPayload,
+      {pulsar_api:decode_msg(Metadata, 'MessageMetadata'), Payload}
+  end.
 
-ledger_id(#'MessageIdData'{ledgerId = LedgerId}) ->
-  LedgerId.
+has_messages_in_batch(#'MessageMetadata'{num_messages_in_batch = NumOfBatchMessages}) ->
+  is_number(NumOfBatchMessages).
 
-entry_id(#'MessageIdData'{entryId = EntryId}) ->
-  EntryId.
+
+read_size(<<Size:32/unsigned-integer, Rest/binary>>) ->
+  {Size, Rest}.
 
 
 new_send(ProducerId, ProducerName, SequenceId, PartitionKey, EventTime, NumMessages, Payload) ->
@@ -100,18 +113,51 @@ new_send(ProducerId, ProducerName, SequenceId, PartitionKey, EventTime, NumMessa
   },
   {SendCmd, Metadata}.
 
-cmd_connect() ->
+
+new_ack(ConsumerId,
+    #messageId{ledger_id = LedgerId, entry_id = EntryId}, Cumulative) ->
+  #'CommandAck'{
+    consumer_id = ConsumerId,
+    ack_type =
+    if Cumulative ->
+      'Cumulative';
+      true ->
+        'Individual'
+    end,
+    message_id = [#'MessageIdData'{ledgerId = LedgerId, entryId = EntryId}]
+  }.
+
+new_ack(ConsumerId, [#messageId{} | _] = MessageIds) ->
+  #'CommandAck'{
+    consumer_id = ConsumerId,
+    ack_type = 'Individual',
+    message_id = [#'MessageIdData'{
+      ledgerId = LedgerId,
+      entryId = EntryId
+    } || #messageId{ledger_id = LedgerId, entry_id = EntryId} <- MessageIds]
+  }.
+
+new_redeliver_un_acked_messages(ConsumerId, MessageIds) when is_list(MessageIds) ->
+  #'CommandRedeliverUnacknowledgedMessages'{
+    consumer_id = ConsumerId,
+    message_ids = [#'MessageIdData'{
+      ledgerId = LedgerId,
+      entryId = EntryId
+    } || #messageId{ledger_id = LedgerId, entry_id = EntryId} <- MessageIds]
+  }.
+
+new_connect() ->
   #'CommandConnect'{
     client_version = ?CLIENT_VSN,
     protocol_version = 6
   }.
 
-cmd_partitioned_topic_meta(Topic) ->
+new_partitioned_topic_meta(Topic) ->
   #'CommandPartitionedTopicMetadata'{
     topic = Topic
   }.
 
-cmd_lookup_topic(Topic, Authoritative) ->
+new_lookup_topic(Topic, Authoritative) ->
   #'CommandLookupTopic'{
     topic = Topic,
     authoritative = Authoritative
@@ -124,10 +170,6 @@ wrap_to_base_command(InnerCmd) when is_tuple(InnerCmd) ->
     type = Type
   },
   setelement(FieldPos, BaseCommand, InnerCmd).
-
-
-
-
 
 
 crc32c(Ls) ->
@@ -162,70 +204,24 @@ set_request_id(Cmd, ReqId) when is_tuple(Cmd) ->
       false
   end.
 
-%%decode(BinData) ->
-%%  {Command, HeadersAndPayload} = decode_command(BinData),
-%%  case HeadersAndPayload of
-%%    <<>> ->
-%%      Command;
-%%    _ ->
-%%      payload_decode(Command, HeadersAndPayload)
-%%  end.
-
-
-
-payload_decode(Command, HeadersAndPayload) ->
-  Checksum = read_checksum(HeadersAndPayload),
-  case verify_checksum(HeadersAndPayload) of
-    true ->
-      ok;
-    _ ->
-      {error, checksum_mismatch}
-  end,
-  case read_checksum(HeadersAndPayload) of
-    undefined ->
-      ok;
-    Checksum ->
-      ok
-  end,
-%%  <<Message:CmdSize/binary, HeadersAndPayload/binary>> = Rest,
-%%  MessageCmd = pulsar_api:decode_msg(Message, 'BaseCommand'),
-%%  io:format("Message Command: ~p~n", [MessageCmd]),
-%%  <<MagicNum:16/unsigned-integer, Checksum:32/unsigned-integer, MetadataSize:32/unsigned-integer, MetadataPayload/binary>>
-%%    = HeadersAndPayload,
-%%  io:format("TotalSize: ~p~n", [TotalSize]),
-%%  io:format("MagicNum: ~p~n", [MagicNum]),
-%%  io:format("Checksum: ~p~n", [Checksum]),
-%%  io:format("Metadata Size: ~p~n", [MetadataSize]),
-%%  <<Metadata:47/binary, Payload/binary>> = MetadataPayload,
-%%  MetadataCmd = pulsar_api:decode_msg(Metadata, 'MessageMetadata'),
-%%  io:format("Metadata Command: ~p~n", [MetadataCmd]),
-  io:format("HeadersAndPayload: ~p~n", [HeadersAndPayload]),
-
-  error(payload_command_unexpected, [HeadersAndPayload]).
-
-verify_checksum(_) ->
-  error(not_implemented_yet).
-
-read_checksum(HeadersAndPayload) ->
+verify_checksum(HeadersAndPayload) ->
   case has_checksum(HeadersAndPayload) of
     true ->
       <<_MagicNumber:2/binary,
         Checksum:32/unsigned-integer,
-        _/binary>> = HeadersAndPayload,
-      Checksum;
+        Rest/binary>> = HeadersAndPayload,
+      CalculatedChecksum = crc32c(Rest),
+      if CalculatedChecksum /= Checksum ->
+        {error, corrupted_message};
+        true ->
+          ok
+      end;
     _ ->
-      undefined
+      ok
   end.
 
 has_checksum(<<MagicNumber:16/unsigned-integer, _/binary>>) ->
   MagicNumber == ?MAGIC_NUMBER.
-
-
-base_wrap(Command, Type, FieldPos) ->
-  Cmd = #'BaseCommand'{
-    type = Type
-  },
-  setelement(FieldPos, Cmd, Command).
 
 
 encode_to_2bytes(I) when is_integer(I) ->
@@ -251,5 +247,9 @@ to_type_and_field_pos(#'CommandFlow'{}) ->
   {'FLOW', #'BaseCommand'.flow};
 to_type_and_field_pos(#'CommandPong'{}) ->
   {'PONG', #'BaseCommand'.pong};
+to_type_and_field_pos(#'CommandAck'{}) ->
+  {'ACK', #'BaseCommand'.ack};
+to_type_and_field_pos(#'CommandRedeliverUnacknowledgedMessages'{}) ->
+  {'REDELIVER_UNACKNOWLEDGED_MESSAGES', #'BaseCommand'.redeliverUnacknowledgedMessages};
 to_type_and_field_pos(Command) ->
   erlang:error({unknown_command, Command}).

@@ -3,27 +3,48 @@
 %%% @doc
 %%%
 %%% @end
-%%% Company: Skulup Ltd
-%%% Copyright: (C) 2019
+%%% Copyright: (C) 2020, Skulup Ltd
 %%%-------------------------------------------------------------------
--author("Alpha Umaru Shaw").
 
 -define(UNDEF, undefined).
 
--define(PRODUCE_TIMEOUT, 10000).
+-record(batch, {
+  index = -1 :: integer(),
+  size :: non_neg_integer()
+}).
 
--define(SHARED_SUBSCRIPTION, shared).
--define(FAILOVER_SUBSCRIPTION, failover).
--define(EXCLUSIVE_SUBSCRIPTION, exclusive).
--define(KEY_SHARED_SUBSCRIPTION, key_shared).
+-record(messageId, {
+  ledger_id :: integer(),
+  entry_id :: integer(),
+  topic :: integer() | ?UNDEF,
+  partition = -1 :: integer(),
+  batch :: #batch{} | ?UNDEF
+}).
 
--define(POS_LATEST, latest).
--define(POS_EARLIEST, earliest).
+-record(messageMeta, {
+  event_time :: integer() | ?UNDEF,
+  delivery_time :: integer() | ?UNDEF,
+  redelivery_count :: integer() | ?UNDEF
+}).
 
--record(prod_message, {
-	key :: string(),
-	event_time = erlwater_time:milliseconds() :: integer(),
-	properties = [] :: map(),
-	value :: binary(),
-	replicate = true :: binary()
+-record(message, {
+  id :: #messageId{},
+  key :: binary() | ?UNDEF,
+  value :: binary(),
+  topic :: binary(),
+  properties = [] :: list(),
+  metadata :: #messageMeta{}
+}).
+
+-record(prodMessage, {
+  key :: string(),
+  event_time = erlwater_time:milliseconds() :: integer(),
+  properties = [] :: map(),
+  value :: binary(),
+  replicate = true :: binary()
+}).
+
+-record(consumerMessage, {
+  consumer :: pid(),
+  message :: #message{}
 }).

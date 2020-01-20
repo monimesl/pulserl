@@ -3,11 +3,9 @@
 %%% @doc
 %%%
 %%% @end
-%%% Company: Skulup Ltd
-%%% Copyright: (C) 2019
+%%% Copyright: (C) 2020, Skulup Ltd
 %%%-------------------------------------------------------------------
 -module(pulserl_client).
--author("Alpha Umaru Shaw").
 
 -behaviour(gen_server).
 
@@ -29,6 +27,8 @@
 
 -define(SERVER, ?MODULE).
 -define(SERVICE_LOOKUP, service_lookup).
+-define(CONNECTION_UP_EVENT, connection_up).
+-define(CONNECTION_DOWN_EVENT, connection_down).
 
 
 -record(cached_conn, {
@@ -130,7 +130,7 @@ init(_args) ->
         operation_timeout = OperationTimeout
       },
       LogicalAddresses = maps:values(PhysicalAddrs2LogicalAddrs),
-      case get_connection_on_one_of_these_logical_addresses(LogicalAddresses, State) of
+      case get_connection_to_one_of_these_logical_addresses(LogicalAddresses, State) of
         {Pid, LogicalAddr, NewState} ->
           erlang:register(?SERVICE_LOOKUP, Pid),
           error_logger:info_msg("Service lookup connection created to: ~s", [LogicalAddr]),
@@ -142,7 +142,7 @@ init(_args) ->
 
 
 handle_call({broker_connection, LogicalAddress}, _From, State) ->
-  case get_connection_on_one_of_these_logical_addresses([LogicalAddress], State) of
+  case get_connection_to_one_of_these_logical_addresses([LogicalAddress], State) of
     {error, Reason} ->
       {reply, {error, Reason}, State};
     {Pid, _, NewState} ->
@@ -168,10 +168,10 @@ handle_cast(_Request, State) ->
   {noreply, State}.
 
 
-handle_info({connection_up, SockAddr, _Socket, ConnPid}, State) ->
+handle_info({?CONNECTION_UP_EVENT, SockAddr, _Socket, ConnPid}, State) ->
   {noreply, update_physical_address_2_connections_map(SockAddr,
     #cached_conn{pid = ConnPid, active = true}, State)};
-handle_info({connection_down, SockAddr, _Socket, ConnPid}, State) ->
+handle_info({?CONNECTION_DOWN_EVENT, SockAddr, _Socket, ConnPid}, State) ->
   {noreply, update_physical_address_2_connections_map(SockAddr,
     #cached_conn{pid = ConnPid, active = false}, State)};
 
@@ -195,7 +195,7 @@ code_change(_OldVsn, State, _Extra) ->
 get_partitioned_topic_meta(Topic,
     #state{service_lookup_connection = SrvConnPid} = State) ->
   TopicName = topic_utils:to_string(Topic),
-  Command = commands:cmd_partitioned_topic_meta(TopicName),
+  Command = commands:new_partitioned_topic_meta(TopicName),
   case pulserl_conn:send_simple_command(SrvConnPid, Command) of
     #'CommandPartitionedTopicMetadataResponse'{
       response = 'Failed', error = Error, message = Msg} ->
@@ -211,7 +211,7 @@ get_partitioned_topic_meta(Topic,
 find_broker_address(Topic,
     #state{service_lookup_connection = SrvConnPid} = State) ->
   TopicName = topic_utils:to_string(Topic),
-  Command = commands:cmd_lookup_topic(TopicName, false),
+  Command = commands:new_lookup_topic(TopicName, false),
   discover_address(TopicName, Command, SrvConnPid, State).
 
 
@@ -231,9 +231,9 @@ discover_address(Topic, Command, ConnPid, State) ->
       authoritative = Authoritative,
       brokerServiceUrl = BrokerServiceUrl,
       brokerServiceUrlTls = BrokerServiceUrlTls} ->
-      NewLookupCommand = commands:cmd_lookup_topic(Topic, Authoritative),
+      NewLookupCommand = commands:new_lookup_topic(Topic, Authoritative),
       ServiceUrl = chose_broker_url(BrokerServiceUrl, BrokerServiceUrlTls, State),
-      case get_connection_on_one_of_these_logical_addresses([ServiceUrl], State) of
+      case get_connection_to_one_of_these_logical_addresses([ServiceUrl], State) of
         {error, Reason} ->
           {{error, Reason}, State};
         {Pid, _, NewState} ->
@@ -247,12 +247,12 @@ discover_address(Topic, Command, ConnPid, State) ->
 
 
 
-get_connection_on_one_of_these_logical_addresses([LogicalAddress | Rest], State) ->
-  PhysAddrs = pulserl_utils:logical_to_physical_addresses(LogicalAddress),
-  case get_connection(PhysAddrs, LogicalAddress, State) of
+get_connection_to_one_of_these_logical_addresses([LogicalAddress | Rest], State) ->
+  PhysicalAddresses = pulserl_utils:logical_to_physical_addresses(LogicalAddress),
+  case get_connection(PhysicalAddresses, LogicalAddress, State) of
     {error, _} = Error ->
       if Rest /= [] ->
-        get_connection_on_one_of_these_logical_addresses(Rest, State);
+        get_connection_to_one_of_these_logical_addresses(Rest, State);
         true ->
           Error
       end;
@@ -272,7 +272,7 @@ get_connection([PhysicalAddr | Rest], LogicalAddr,
     {1, [C]} ->
       %% 1 connection with 1 as `max` so we just returned it.
       {C#cached_conn.pid, LogicalAddr, State};
-    {Max, Conns} when length(Conns) < Max ->
+    {Max, Connections} when length(Connections) < Max ->
       %% Less connections than the `max`; we create more
       case create_connection(LogicalAddr, State) of
         {error, _} = Error ->
@@ -283,20 +283,19 @@ get_connection([PhysicalAddr | Rest], LogicalAddr,
           end;
         Result -> Result
       end;
-    {Max, Conns} when Max == length(Conns) ->
+    {Max, Connections} when Max == length(Connections) ->
       %% Connections == `max`; we return them sequentially
       Pos = State#state.cnx_lookup_current_pos,
-      CurrConnection = lists:nth((Pos rem Max) + 1, Conns),
+      CurrConnection = lists:nth((Pos rem Max) + 1, Connections),
       {CurrConnection#cached_conn.pid, LogicalAddr,
         State#state{cnx_lookup_current_pos = Pos + 1}}
   end.
 
 
-chose_broker_url(PlainUrl, TlsUrl, State) ->
-  case State#state.use_tls of
-    true -> TlsUrl;
-    _ -> PlainUrl
-  end.
+chose_broker_url(_PlainUrl, TlsUrl, #state{use_tls = true}) ->
+  TlsUrl;
+chose_broker_url(PlainUrl, _TlsUrl, _State) ->
+  PlainUrl.
 
 parse_and_resolve_service_url(ServiceUrl) ->
   ServiceUrl2 = erlwater:to_binary(ServiceUrl),
@@ -327,13 +326,12 @@ create_connection(LogicalAddress, #state{} = State) ->
     {nodelay, State#state.enable_tcp_no_delay},
     {keepalive, State#state.enable_tcp_keep_alive}
   ],
-  ConnOpts2 = [{logical_address, LogicalAddress} | ConnOpts],
-  case pulserl_conn:create(ConnOpts2) of
+  case pulserl_conn:create([{logical_address, LogicalAddress} | ConnOpts]) of
     {ok, ConnPid} ->
-      %% To avoid, race condition on new connection update,
+      %% To avoid race condition on new connection update,
       %% we retrieve the message here and do the update right away
       receive
-        {connection_up, SockAddr, _Socket, ConnPid} ->
+        {?CONNECTION_UP_EVENT, SockAddr, _Socket, ConnPid} ->
           State1 = update_physical_address_2_logical_address_map(SockAddr, LogicalAddress, State),
           State2 = update_physical_address_2_connections_map(SockAddr,
             #cached_conn{pid = ConnPid, active = true}, State1),
@@ -347,18 +345,28 @@ update_physical_address_2_logical_address_map(PhysicalAddress, LogicalAddress, S
   State#state{physical_address_2_logical_address = maps:put(PhysicalAddress, LogicalAddress, Map)}.
 
 update_physical_address_2_connections_map(PhysicalAddress, #cached_conn{} = Conn, State) ->
-  PhysicalAddress2Conns = maps:update_with(PhysicalAddress,
-    fun(Conns) ->
+  PhysicalAddress2Connections = maps:update_with(PhysicalAddress,
+    fun(Connections) ->
       PidPos = #cached_conn.pid,
       ConnPid = element(PidPos, Conn),
-      case lists:keyfind(ConnPid, PidPos, Conns) of
-        false -> [Conn | Conns];
-        _ -> lists:keyreplace(ConnPid, PidPos, Conns, Conn)
+      case lists:keyfind(ConnPid, PidPos, Connections) of
+        false -> [Conn | Connections];
+        _ -> lists:keyreplace(ConnPid, PidPos, Connections, Conn)
       end
     end,
     [Conn],
     State#state.physical_address_2_connection),
   error_logger:info_msg("Pulsar connections updated. Before: ~p. Now: ~p",
-    [State#state.physical_address_2_connection, PhysicalAddress2Conns]),
-  State#state{physical_address_2_connection = PhysicalAddress2Conns}.
+    [logical_address2connections(State#state.physical_address_2_connection, State#state.physical_address_2_logical_address),
+      logical_address2connections(PhysicalAddress2Connections, State#state.physical_address_2_logical_address)
+    ]),
+  State#state{physical_address_2_connection = PhysicalAddress2Connections}.
+
+
+logical_address2connections(Physical2Connections, Physical2LogicalAddresses) ->
+  maps:fold(
+    fun(PhysicalAddress, Connections, Acc) ->
+      LogicalAddress = maps:get(PhysicalAddress, Physical2LogicalAddresses),
+      maps:put(LogicalAddress, [{Pid, Active} || #cached_conn{pid = Pid, active = Active} <- Connections], Acc)
+    end, #{}, Physical2Connections).
 

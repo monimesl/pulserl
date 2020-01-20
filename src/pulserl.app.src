@@ -1,8 +1,8 @@
 {application, pulserl,
-  [{description, "An OTP application"},
+  [{description, "Apache Pulsar Erlang Client"},
     {vsn, "0.1.0"},
     {registered, []},
-    {mod, {pulserl, []}},
+    {mod, {pulserl_app, []}},
     {applications,
       [kernel,
         stdlib

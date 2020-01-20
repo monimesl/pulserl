@@ -3,11 +3,9 @@
 %%% @doc
 %%%
 %%% @end
-%%% Company: Skulup Ltd
-%%% Copyright: (C) 2019
+%%% Copyright: (C) 2020, Skulup Ltd
 %%%-------------------------------------------------------------------
 -module(pulserl_conn).
--author("Alpha Umaru Shaw").
 
 
 -behaviour(gen_server).
@@ -73,6 +71,7 @@ start_link(Args) ->
 -record(state, {
   state,
   socket,
+  data_buffer = <<>>,
   socket_address,
   logical_address,
   tcp_options,
@@ -166,8 +165,10 @@ handle_cast(Request, State) ->
 
 
 %% Info callback
-handle_info({tcp, Sock, Data}, #state{socket = Sock} = State) ->
-  {noreply, handle_broker_response(Data, State)};
+handle_info({tcp, Sock, Data}, #state{socket = Sock, data_buffer = DataBuffer} = State) ->
+  NewDataBuffer = iolist_to_binary([DataBuffer, Data]),
+  NewState = State#state{data_buffer = NewDataBuffer},
+  {noreply, handle_broker_data(NewState)};
 
 handle_info({timeout, TimerRef, reconnect},
     #state{logical_address = LogicalAddress, reconnect_timer = TimerRef} = State) ->
@@ -205,12 +206,40 @@ terminate(_Reason, _State) ->
 code_change(_OldVsn, State, _Extra) ->
   {ok, State}.
 
-
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
-handle_broker_response(Data, State) ->
-  {Command, _HeadersAndPayload} = commands:decode(Data),
+
+handle_broker_data(State) ->
+  case read_complete_frame(State) of
+    {false, NewState} ->
+      %% Frame is incomplete
+      NewState;
+    {FrameData, NewState} ->
+      NewState2 = handle_command(FrameData, NewState),
+      handle_broker_data(NewState2)
+  end.
+
+
+-define(FRAME_LENGTH_INDICATOR_BYTE_SIZE, 4).
+
+%% @Read https://pulsar.apache.org/docs/en/develop-binary-protocol/#framing
+read_complete_frame(#state{data_buffer = DataBuffer} = State) ->
+  if byte_size(DataBuffer) > ?FRAME_LENGTH_INDICATOR_BYTE_SIZE ->
+    {FrameLength, Rest} = commands:read_size(DataBuffer),
+    if byte_size(Rest) >= FrameLength ->
+      <<Frame:FrameLength/binary, NewDataBuffer/binary>> = Rest,
+      CompleteFrame = <<FrameLength:32/unsigned-integer, Frame/binary>>,
+      {CompleteFrame, State#state{data_buffer = NewDataBuffer}};
+      true ->
+        {false, State}
+    end;
+    true ->
+      {false, State}
+  end.
+
+handle_command(Data, State) ->
+  {Command, HeadersAndPayload} = commands:decode(Data),
   case Command of
     #'CommandPing'{} ->
       send_pong_to_broker(State);
@@ -226,10 +255,14 @@ handle_broker_response(Data, State) ->
       handle_partition_topic_metadata(Command, State);
     #'CommandCloseProducer'{} ->
       handle_close_producer(Command, State);
+    #'CommandCloseConsumer'{} ->
+      handle_close_consumer(Command, State);
     #'CommandSendReceipt'{} ->
       handle_send_receipt(Command, State);
     #'CommandProducerSuccess'{} ->
       handle_producer_success(Command, State);
+    #'CommandMessage'{} ->
+      handle_message(Command, HeadersAndPayload, State);
     _ ->
       error({handler_not_implemented, Command})
   end.
@@ -242,14 +275,11 @@ handle_error(#'CommandError'{request_id = RequestId, error = Error, message = Ms
   send_reply_to_request_waiter(RequestId, {error, {Error, Msg}}, State).
 
 handle_send_receipt(#'CommandSendReceipt'{
-  producer_id = ProdId, sequence_id = SequenceId, message_id = MsgId}, State) ->
+  producer_id = ProdId, sequence_id = SequenceId,
+  message_id = MessageId}, State) ->
   fetch_producer_by_id(ProdId, State,
     fun(Pid) when is_pid(Pid) ->
-      pulserl_producer:inform(Pid, {
-        ack_received, SequenceId,
-        commands:ledger_id(MsgId),
-        commands:entry_id(MsgId)
-      });
+      safe_send(Pid, {ack_received, SequenceId, MessageId});
       (_) ->
         error_logger:warning_msg("The producer with id: ~p "
         "not found when send receipt is received", [ProdId])
@@ -262,9 +292,7 @@ handle_send_error(#'CommandSendError'{
   message = Message}, State) ->
   fetch_producer_by_id(ProdId, State,
     fun(Pid) when is_pid(Pid) ->
-      pulserl_producer:inform(Pid, {
-        send_error, SequenceId, {error, {Error, Message}}
-      });
+      safe_send(Pid, {send_error, SequenceId, {error, {Error, Message}}});
       (_) ->
         error_logger:warning_msg("The producer with id: ~p "
         "not found when when send failed", [ProdId])
@@ -273,6 +301,16 @@ handle_send_error(#'CommandSendError'{
 handle_producer_success(#'CommandProducerSuccess'{
   request_id = RequestId} = Response, State) ->
   send_reply_to_request_waiter(RequestId, Response, State).
+
+
+handle_close_consumer(#'CommandCloseConsumer'{consumer_id = ConsumerId}, State) ->
+  fetch_consumer_by_id(ConsumerId, State,
+    fun(Pid) when is_pid(Pid) ->
+      pulserl_consumer:close(Pid, true);
+      (_) ->
+        error_logger:warning_msg("The consumer with id: ~p "
+        "not found while closing", [ConsumerId])
+    end).
 
 handle_close_producer(#'CommandCloseProducer'{producer_id = ProdId}, State) ->
   fetch_producer_by_id(ProdId, State,
@@ -300,6 +338,28 @@ handle_error_prod_cons_send(#'CommandSend'{
     producer_id = ProdId, sequence_id = SequenceId, error = Reason
   }, State).
 
+
+handle_message(#'CommandMessage'{
+  consumer_id = ConsumerId,
+  message_id = MsgId,
+  redelivery_count = RedeliveryCount},
+    HeadersAndPayload, State) ->
+  fetch_consumer_by_id(ConsumerId, State,
+    fun(Pid) when is_pid(Pid) ->
+      safe_send(Pid, {new_message, MsgId, RedeliveryCount, HeadersAndPayload});
+      (_) ->
+        error_logger:warning_msg("The consumer with id: ~p "
+        "not found when message arrive", [ConsumerId])
+    end).
+
+fetch_consumer_by_id(ConsumerId, State, Callback) ->
+  case dict:find(ConsumerId, State#state.consumers) of
+    {ok, ProducerPid} ->
+      Callback(ProducerPid);
+    _ ->
+      Callback(undefined)
+  end,
+  State.
 
 fetch_producer_by_id(ProducerId, State, Callback) ->
   case dict:find(ProducerId, State#state.producers) of
@@ -447,7 +507,7 @@ connect_to_broker(State, IpAddress, Port, Attempts) ->
 
 
 perform_handshake(#state{socket = Socket} = State) ->
-  ConnectCommand = commands:cmd_connect(),
+  ConnectCommand = commands:new_connect(),
   case send_internal(ConnectCommand, State) of
     {_, {error, Reason}, _} ->
       {error, Reason};
@@ -511,4 +571,7 @@ notify_client_of_down(Error, #state{socket_address = SockAddr, socket = Socket} 
   State#state{state = undefined, socket = undefined}.
 
 notify_parties(ConnectionState, Parties) ->
-  [Pid ! ConnectionState || {_, Pid} <- Parties].
+  [safe_send(Pid, ConnectionState) || {_, Pid} <- Parties].
+
+safe_send(To, Msg) ->
+  try To ! Msg catch _:_ -> Msg end.

@@ -3,11 +3,9 @@
 %%% @doc
 %%%
 %%% @end
-%%% Company: Skulup Ltd
-%%% Copyright: (C) 2019
+%%% Copyright: (C) 2020, Skulup Ltd
 %%%-------------------------------------------------------------------
 -module(pulserl_producer).
--author("Alpha Umaru Shaw").
 
 -include("pulserl.hrl").
 -include("pulserl_topics.hrl").
@@ -15,11 +13,8 @@
 
 -behaviour(gen_server).
 
-%% API
--export([create/2, produce/3, sync_produce/3]).
--export([start_link/2, inform/2, close/2]).
-
-
+%% gen_Server API
+-export([start_link/2]).
 %% gen_server callbacks
 -export([init/1,
   handle_call/3,
@@ -28,8 +23,17 @@
   terminate/2,
   code_change/3]).
 
+%% Producer API
+-export([create/2, close/1, close/2]).
+-export([produce/3, sync_produce/3, new_message/1, new_message/2, new_message/3, new_message/4]).
 
-produce(Pid, #prod_message{} = Message, Callback) ->
+
+%%--------------------------------------------------------------------
+%% @doc
+
+%% @end
+%%--------------------------------------------------------------------
+produce(Pid, #prodMessage{} = Message, Callback) ->
   {CallerFun, CallReturn} =
     if is_function(Callback) ->
       {fun() -> gen_server:call(Pid, {send_message, Callback, Message}) end, ok};
@@ -43,8 +47,8 @@ produce(Pid, #prod_message{} = Message, Callback) ->
         CallReturn;
       {error, _} = Error ->
         Error;
-      {redirect, PartitionProducerPid} ->
-        produce(PartitionProducerPid, Message, Callback)
+      {redirect, ChildProducerPid} ->
+        produce(ChildProducerPid, Message, Callback)
     end
   catch
     _:{timeout, _} ->
@@ -53,14 +57,21 @@ produce(Pid, #prod_message{} = Message, Callback) ->
       {error, {producer_error, Reason}}
   end.
 
+%%--------------------------------------------------------------------
+%% @doc
 
-sync_produce(Pid, #prod_message{} = Message, Timeout) ->
+%% @end
+%%--------------------------------------------------------------------
+sync_produce(Pid, #prodMessage{} = Message, ?UNDEF) ->
+  sync_produce(Pid, Message, timer:seconds(10));
+
+sync_produce(Pid, #prodMessage{} = Message, Timeout) ->
   ClientRef = erlang:make_ref(),
   MonitorRef = erlang:monitor(process, Pid),
   case gen_server:call(Pid, {send_message, {self(), ClientRef}, Message}) of
-    {redirect, SpecificPartitionProducer} ->
+    {redirect, ChildProducerPid} ->
       erlang:demonitor(MonitorRef, [flush]),
-      sync_produce(SpecificPartitionProducer, Message, Timeout);
+      sync_produce(ChildProducerPid, Message, Timeout);
     ok ->
       receive
         {ClientRef, Reply} ->
@@ -76,49 +87,79 @@ sync_produce(Pid, #prod_message{} = Message, Timeout) ->
       Other
   end.
 
+%%--------------------------------------------------------------------
+%% @doc
+
+%% @end
+%%--------------------------------------------------------------------
+new_message(Value) ->
+  new_message(<<>>, Value).
+
+%%--------------------------------------------------------------------
+%% @doc
+
+%% @end
+%%--------------------------------------------------------------------
+new_message(Key, Value) ->
+  new_message(Key, Value, []).
+
+%%--------------------------------------------------------------------
+%% @doc
+
+%% @end
+%%--------------------------------------------------------------------
+new_message(Key, Value, Properties) ->
+  new_message(Key, Value, Properties, erlwater_time:milliseconds()).
+
+%%--------------------------------------------------------------------
+%% @doc
+
+%% @end
+%%--------------------------------------------------------------------
+new_message(Key, Value, Properties, EventTime) ->
+  Key2 = case Key of ?UNDEF -> <<>>; _ -> Key end,
+  #prodMessage{
+    key = erlwater:to_binary(Key2),
+    value = erlwater:to_binary(Value),
+    event_time = erlwater:to_integer(EventTime),
+    properties = Properties,
+    replicate = true
+  }.
+
+%%--------------------------------------------------------------------
+%% @doc
+
+%% @end
+%%--------------------------------------------------------------------
+create(Topic, Options) when is_list(Topic) ->
+  create(list_to_binary(Topic), Options);
+
+create(Topic, Options) when is_binary(Topic) ->
+  create(topic_utils:parse(Topic), Options);
 
 create(#topic{} = Topic, Options) ->
   Options2 = validate_options(Options),
   supervisor:start_child(pulserl_producer_sup, [Topic, Options2]).
 
 
-validate_options(Options) when is_list(Options) ->
-  erlwater_assertions:is_proplist(Options),
-  lists:foreach(
-    fun({batch_enable, _} = Opt) ->
-      erlwater_assertions:is_boolean(Opt);
-      ({block_on_full_queue, _V} = Opt) ->
-        erlwater_assertions:is_boolean(Opt);
-      ({batch_max_messages, _V} = Opt) ->
-        erlwater_assertions:is_positive_int(Opt);
-      ({batch_max_delay_ms, _V} = Opt) ->
-        erlwater_assertions:is_positive_int(Opt);
-      ({max_pending_messages, _V} = Opt) ->
-        erlwater_assertions:is_positive_int(Opt);
-      ({max_pending_messages_across_partitions, _V} = Opt) ->
-        erlwater_assertions:is_positive_int(Opt);
-      ({initial_sequence_id, _V} = Opt) ->
-        erlwater_assertions:is_non_negative_int(Opt);
-      ({producer_name, _V} = Opt) ->
-        erlwater_assertions:is_string(Opt);
-      ({properties, _V} = Opt) ->
-        erlwater_assertions:is_proplist(Opt);
-      (Opt) ->
-        error(unknown_producer_options, [Opt])
-    end,
-    Options),
-  Options.
+%%--------------------------------------------------------------------
+%% @doc
+
+%% @end
+%%--------------------------------------------------------------------
+close(Pid) ->
+  close(Pid, false).
+
+close(Pid, AttemptRestart) ->
+  gen_server:cast(Pid, {close, AttemptRestart}).
 
 
+%%%===================================================================
+%%% gen_server API
+%%%===================================================================
 
 start_link(#topic{} = Topic, Options) ->
   gen_server:start_link(?MODULE, [Topic, Options], []).
-
-inform(Pid, Information) ->
-  gen_server:cast(Pid, Information).
-
-close(Pid, Restart) ->
-  gen_server:cast(Pid, {close, Restart}).
 
 
 %%%===================================================================
@@ -126,7 +167,6 @@ close(Pid, Restart) ->
 %%%===================================================================
 
 -define(STATE_READY, ready).
-
 -define(ERROR_PRODUCER_CLOSED, {error, producer_closed}).
 -define(ERROR_PRODUCER_NOT_READY, {error, producer_not_ready}).
 
@@ -134,7 +174,7 @@ close(Pid, Restart) ->
   state,
   connection :: pid(),
   producer_id :: integer(),
-  partition_count :: integer(),
+  partition_count = 0 :: non_neg_integer(),
   partition_to_child = dict:new(),
   child_to_partition = dict:new(),
   batch_requests = queue:new(),
@@ -163,7 +203,7 @@ init([#topic{} = Topic, Opts]) ->
     topic = Topic,
     options = Opts,
     batch_enable = proplists:get_value(batch_enable, Opts, true),
-    batch_max_delay_ms = proplists:get_value(batch_max_delay_ms, Opts, 1),
+    batch_max_delay_ms = proplists:get_value(batch_max_delay_ms, Opts, 10),
     batch_max_messages = proplists:get_value(batch_max_messages, Opts, 1000),
     max_pending_messages = proplists:get_value(max_pending_messages, Opts, 1000),
     block_on_full_queue = proplists:get_value(block_on_full_queue, Opts, true),
@@ -173,23 +213,22 @@ init([#topic{} = Topic, Opts]) ->
     max_pending_messages_across_partitions = proplists:get_value(
       max_pending_messages_across_partitions, Opts, 50000)
   },
-  {InitSeqId, SeqId} = case State#state.initial_sequence_id of undefined -> {0, 0}; I ->
+  {InitSeqId, SeqId} = case State#state.initial_sequence_id of ?UNDEF -> {0, 0}; I ->
     {I, I + 1} end,
   case initialize(State#state{initial_sequence_id = InitSeqId, sequence_id = SeqId}) of
     {error, Reason} ->
       {stop, Reason};
     NewState ->
-      erlang:send(instance_provider, {producer_up, self(), Topic}),
-      {ok, NewState}
+      {ok, notify_instance_provider_of_state(NewState, producer_up)}
   end.
 
-
-handle_call({send_message, _ClientFrom, _}, _From, #state{state = undefined} = State) ->
+handle_call(_, _From, #state{state = ?UNDEF} = State) ->
+  %% I'm not ready yet
   {reply, ?ERROR_PRODUCER_NOT_READY, State};
 
-handle_call({send_message, _ClientFrom, #prod_message{key = Key}}, _From,
-    #state{partition_count = PartitionCount} = State)
-  when is_integer(PartitionCount), PartitionCount > 0 ->
+%% The parent
+handle_call({send_message, _ClientFrom, #prodMessage{key = Key}}, _From,
+    #state{partition_count = PartitionCount} = State) when PartitionCount > 0 ->
   %% This producer is the partition parent.
   %% We choose the child producer and redirect
   %% the client to it.
@@ -200,6 +239,7 @@ handle_call({send_message, _ClientFrom, #prod_message{key = Key}}, _From,
     end,
   {reply, Replay, State};
 
+%% The child/no-child-producer
 handle_call({send_message, ClientFrom, Message}, _From, State) ->
   {Reply, NewState} = may_be_produce_message(Message, ClientFrom, State),
   {reply, Reply, NewState};
@@ -207,34 +247,32 @@ handle_call(Request, _From, State) ->
   error_logger:warning_msg("Unexpected call: ~p in ~p(~p)", [Request, ?MODULE, self()]),
   {reply, ok, State}.
 
-handle_cast({ack_received, SequenceId, LedgerId, EntryId},
-    #state{topic = Topic} = State) ->
-  Reply = pulserl_utils:new_message_id(Topic, LedgerId, EntryId),
-  {noreply, send_reply_to_producer_waiter(SequenceId, Reply, State)};
-
-handle_cast({send_error, SequenceId, {error, _} = Error}, State) ->
-  {noreply, send_reply_to_producer_waiter(SequenceId, Error, State)};
-
 %% The producer was ask to close
-handle_cast({close, Restart}, State) ->
-  case Restart of
+handle_cast({close, AttemptRestart}, State) ->
+  case AttemptRestart of
     true ->
       error_logger:info_msg("Temporariliy closing producer: ~p",
         [topic_utils:to_string(State#state.topic)]),
-      State2 = close_children(State, Restart),
+      State2 = close_children(State, AttemptRestart),
       State3 = send_reply_to_all_waiters(?ERROR_PRODUCER_CLOSED, State2),
-      {noreply, try_reinitialize(State3#state{state = undefined})};
+      {noreply, try_reinitialize(State3#state{state = ?UNDEF})};
     _ ->
       error_logger:info_msg("Producer(~p) at: ~p is permanelty closing",
         [self(), topic_utils:to_string(State#state.topic)]),
       State2 = send_reply_to_all_waiters(?ERROR_PRODUCER_CLOSED, State),
-      {close, normal, close_children(State2, Restart)}
+      {close, normal, close_children(State2, AttemptRestart)}
   end;
 
 handle_cast(Request, State) ->
   error_logger:warning_msg("Unexpected Cast: ~p", [Request]),
   {noreply, State}.
 
+handle_info({ack_received, SequenceId, MessageId}, #state{topic = Topic} = State) ->
+  Reply = pulserl_utils:new_message_id(Topic, MessageId),
+  {noreply, send_reply_to_producer_waiter(SequenceId, Reply, State)};
+
+handle_info({send_error, SequenceId, {error, _} = Error}, State) ->
+  {noreply, send_reply_to_producer_waiter(SequenceId, Error, State)};
 
 handle_info({timeout, _TimerRef, send_batch},
     #state{batch_enable = true,
@@ -250,30 +288,30 @@ handle_info({timeout, _TimerRef, send_batch},
       {noreply, start_batch_timer(State)}
   end;
 
-%% Last reinitialization failed. Still trying..
-handle_info(try_reinitialize, State) ->
-  {noreply, try_reinitialize(State)};
-
 %% Our connection is down. We stop the scheduled
 %% re-initialization attempts and try again after
 %% a `connection_up` message
 handle_info(connection_down, State) ->
-  if State#state.re_init_timer /= undefined ->
-    erlang:cancel_timer(State#state.re_init_timer),
-    {noreply, State#state{state = undefined, re_init_timer = undefined}};
+  NewState = send_reply_to_all_waiters(?ERROR_PRODUCER_CLOSED, State),
+  if NewState#state.re_init_timer /= ?UNDEF ->
+    erlang:cancel_timer(NewState#state.re_init_timer),
+    {noreply, NewState#state{state = ?UNDEF, re_init_timer = ?UNDEF}};
     true ->
-      {noreply, State}
+      {noreply, NewState}
   end;
 
 %% Try re-initialization again
 handle_info(connection_up, State) ->
   {noreply, try_reinitialize(State)};
 
+%% Last reinitialization failed. Still trying..
+handle_info(try_reinitialize, State) ->
+  {noreply, try_reinitialize(State)};
+
 
 handle_info({'DOWN', _ConnMonitorRef, process, _Pid, _},
     #state{} = State) ->
-  %% This hardly happens as we design the
-  %% connection to avoid frequent death
+  %% This shouldn't happen as we design the connection to avoid crashing
   {stop, normal, send_reply_to_all_waiters(?ERROR_PRODUCER_CLOSED, State)};
 
 handle_info({'EXIT', Pid, Reason}, State) ->
@@ -293,9 +331,8 @@ handle_info(Info, State) ->
   {noreply, State}.
 
 
-terminate(_Reason, #state{topic = Topic} = _State) ->
-  erlang:send(instance_provider, {producer_down, self(), Topic}),
-  ok.
+terminate(_Reason, State) ->
+  notify_instance_provider_of_state(State, producer_down).
 
 
 code_change(_OldVsn, State, _Extra) ->
@@ -304,11 +341,18 @@ code_change(_OldVsn, State, _Extra) ->
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
+
 send_reply_to_producer_waiter(SequenceId, Reply,
     #state{pending_requests = PendingRequests} = State) ->
-  {SucceededPendingRequests, PendingRequests2} = dict:take(SequenceId, PendingRequests),
-  State2 = send_replies_to_waiters(Reply, SucceededPendingRequests, State),
-  State2#state{pending_requests = PendingRequests2}.
+  case dict:take(SequenceId, PendingRequests) of
+    {SucceededPendingRequests, PendingRequests2} ->
+      State2 = send_replies_to_waiters(Reply, SucceededPendingRequests, State),
+      State2#state{pending_requests = PendingRequests2};
+    _ ->
+      error_logger:warning_msg("Couldn't see the waiter in the waiting list of "
+      "producer: ~p during reply with sequence id: ~p", [self(), SequenceId]),
+      State
+  end.
 
 
 choose_partition_producer(Key, State) ->
@@ -365,17 +409,21 @@ next_request_batch(#state{batch_requests = BatchRequests} = State, Size) ->
       {[], BatchRequests}
   end.
 
-send_message({_, #prod_message{value = Payload} = Msg} = Request,
+send_message({_, #prodMessage{value = Payload} = Msg} = Request,
     #state{connection = Cnx, sequence_id = SeqId} = State) ->
   {SendCmd, Metadata} = commands:new_send(State#state.producer_id,
-    State#state.producer_name, SeqId, Msg#prod_message.key, Msg#prod_message.event_time,
+    State#state.producer_name, SeqId, Msg#prodMessage.key, Msg#prodMessage.event_time,
     %% `num_messages_in_batch` must be undefined for non-batch messages
-    undefined, Payload),
+    ?UNDEF, Payload),
   PendingRequests = dict:store(SeqId, [Request], State#state.pending_requests),
   NewState = State#state{sequence_id = SeqId + 1, pending_requests = PendingRequests},
   pulserl_conn:send_payload_command(Cnx, SendCmd, Metadata, Payload),
   NewState.
 
+
+send_batch_messages([Request], State) ->
+  %% Only one request. Don't batch it
+  send_message(Request, State);
 
 send_batch_messages(Batch, #state{
   connection = Cnx,
@@ -384,14 +432,14 @@ send_batch_messages(Batch, #state{
   producer_name = ProducerName} = State) ->
   {FinalSeqId, BatchPayload} = lists:foldl(
     fun({_, Msg}, {SeqId0, BatchBuffer0}) ->
-      Payload = Msg#prod_message.value,
+      Payload = Msg#prodMessage.value,
       SingleMsgMeta =
         #'SingleMessageMetadata'{
           sequence_id = SeqId0,
           payload_size = byte_size(Payload),
-          partition_key = Msg#prod_message.key,
-          properties = Msg#prod_message.properties,
-          event_time = Msg#prod_message.event_time
+          partition_key = Msg#prodMessage.key,
+          properties = Msg#prodMessage.properties,
+          event_time = Msg#prodMessage.event_time
         },
       SerializedSingleMsgMeta = pulsar_api:encode_msg(SingleMsgMeta),
       SerializedSingleMsgMetaSize = byte_size(SerializedSingleMsgMeta),
@@ -403,7 +451,7 @@ send_batch_messages(Batch, #state{
     end, {SeqId, <<>>}, Batch),
   [{_, FirstMsg} | _] = Batch,
   {SendCmd, Metadata} = commands:new_send(ProducerId, ProducerName, FinalSeqId,
-    undefined, FirstMsg#prod_message.event_time,
+    ?UNDEF, FirstMsg#prodMessage.event_time,
     length(Batch), BatchPayload
   ),
   PendingRequests = dict:store(FinalSeqId, Batch, State#state.pending_requests),
@@ -470,7 +518,7 @@ enqueue_request(Request, #state{batch_requests = BatchRequests} = State) ->
 
 update_pending_messages_count_across_partitions(
     #state{topic = Topic}, Increment) ->
-  if Topic#topic.parent /= undefined ->
+  if Topic#topic.parent /= ?UNDEF ->
     %% this is a producer to one of the partition
     TopicName = topic_utils:to_string(Topic#topic.parent),
     Update =
@@ -525,32 +573,22 @@ try_reinitialize(State) ->
 initialize(#state{topic = Topic} = State) ->
   case topic_utils:is_partitioned(Topic) of
     true ->
-      do_simple_initialization(State);
+      initialize_self(State);
     _ ->
-      do_initialization(State)
+      case pulserl_client:get_partitioned_topic_meta(Topic) of
+        #partition_meta{partitions = PartitionCount} ->
+          State2 = State#state{partition_count = PartitionCount},
+          if PartitionCount == 0 ->
+            initialize_self(State2);
+            true ->
+              initialize_children(State2)
+          end;
+        {error, _} = Error -> Error
+      end
   end.
 
 
-do_initialization(#state{topic = Topic} = State) ->
-  case pulserl_client:get_partitioned_topic_meta(Topic) of
-    #partition_meta{partitions = PartitionCount} ->
-      State2 = State#state{partition_count = PartitionCount},
-      case PartitionCount of
-        0 ->
-          do_simple_initialization(State2);
-        _ ->
-          case create_inner_producers(State2) of
-            {ok, NewState2} ->
-              NewState2#state{state = ?STATE_READY};
-            {error, _} = Error ->
-              Error
-          end
-      end;
-    {error, _} = Error -> Error
-  end.
-
-
-do_simple_initialization(#state{topic = Topic} = State) ->
+initialize_self(#state{topic = Topic} = State) ->
   case pulserl_client:get_broker_address(Topic) of
     LogicalAddress when is_list(LogicalAddress) ->
       case pulserl_client:get_broker_connection(LogicalAddress) of
@@ -566,23 +604,24 @@ do_simple_initialization(#state{topic = Topic} = State) ->
       Error
   end.
 
-create_inner_producers(#state{partition_count = Total} = State) ->
+initialize_children(#state{partition_count = NumberOfPartitions} = State) ->
   {NewState, Err} = lists:foldl(
-    fun(Index, {S, Error}) ->
-      if Error == undefined ->
-        case create_inner_producer(Index, S) of
+    fun(PartitionIndex, {State0, Error}) ->
+      if Error == ?UNDEF ->
+        case create_inner_producer(PartitionIndex, State0) of
           {_, #state{} = S2} ->
             {S2, Error};
           Error0 ->
-            {S, Error0}
+            {State0, Error0}
         end;
         true ->
-          {S, Error}
+          {State0, Error}
       end
-    end, {State, undefined}, lists:seq(0, Total - 1)),
+    end, {State, ?UNDEF}, lists:seq(0, NumberOfPartitions - 1)),
   case Err of
-    undefined ->
-      {ok, NewState};
+    ?UNDEF ->
+      %% Initialize the parent straight away
+      NewState#state{state = ?STATE_READY};
     {error, _} = Err ->
       [pulserl_producer:close(Pid, false) || {_, Pid} <- dict:fetch_keys(NewState#state.child_to_partition)],
       Err
@@ -646,12 +685,58 @@ create_inner_producer(Retries, Index,
   end.
 
 
-close_children(State, Restart) ->
+close_children(State, AttemptRestart) ->
   lists:foreach(
     fun(Pid) ->
-      pulserl_producer:close(Pid, Restart)
+      pulserl_producer:close(Pid, AttemptRestart)
     end, dict:fetch_keys(State#state.child_to_partition)),
   State#state{
     child_to_partition = dict:new(),
     partition_to_child = dict:new()
   }.
+
+%% Check whether this producer is:
+%% 1  -> a non-partitioned producer or
+%%
+%% 2  -> a parent of a some partitioned producers.
+%%       Request sent to this parent are routed to the necessary child producer
+is_single_or_parent(Topic) ->
+  not topic_utils:is_partitioned(Topic).
+
+notify_instance_provider_of_state(
+    #state{topic = Topic} = State,
+    Event) ->
+  case is_single_or_parent(Topic) of
+    true ->
+      erlang:send(pulserl_instance_registry, {Event, self(), Topic});
+    _ ->
+      ok
+  end,
+  State.
+
+validate_options(Options) when is_list(Options) ->
+  erlwater_assertions:is_proplist(Options),
+  lists:foreach(
+    fun({batch_enable, _} = Opt) ->
+      erlwater_assertions:is_boolean(Opt);
+      ({block_on_full_queue, _V} = Opt) ->
+        erlwater_assertions:is_boolean(Opt);
+      ({batch_max_messages, _V} = Opt) ->
+        erlwater_assertions:is_positive_int(Opt);
+      ({batch_max_delay_ms, _V} = Opt) ->
+        erlwater_assertions:is_positive_int(Opt);
+      ({max_pending_messages, _V} = Opt) ->
+        erlwater_assertions:is_positive_int(Opt);
+      ({max_pending_messages_across_partitions, _V} = Opt) ->
+        erlwater_assertions:is_positive_int(Opt);
+      ({initial_sequence_id, _V} = Opt) ->
+        erlwater_assertions:is_non_negative_int(Opt);
+      ({producer_name, _V} = Opt) ->
+        erlwater_assertions:is_string(Opt);
+      ({properties, _V} = Opt) ->
+        erlwater_assertions:is_proplist(Opt);
+      (Opt) ->
+        error(unknown_producer_options, [Opt])
+    end,
+    Options),
+  Options.

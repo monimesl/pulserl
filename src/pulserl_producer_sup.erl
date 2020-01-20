@@ -3,11 +3,9 @@
 %%% @doc
 %%%
 %%% @end
-%%% Company: Skulup Ltd
-%%% Copyright: (C) 2019
+%%% Copyright: (C) 2020, Skulup Ltd
 %%%-------------------------------------------------------------------
 -module(pulserl_producer_sup).
--author("Alpha Umaru Shaw").
 
 -behaviour(supervisor).
 

@@ -3,11 +3,9 @@
 %%% @doc
 %%%
 %%% @end
-%%% Company: Skulup Ltd
-%%% Copyright: (C) 2020
+%%% Copyright: (C) 2020, Skulup Ltd
 %%%-------------------------------------------------------------------
--module(instance_provider).
--author("Alpha Umaru Shaw").
+-module(pulserl_instance_registry).
 
 -include("pulserl_topics.hrl").
 
@@ -15,7 +13,7 @@
 
 %% API
 -export([start_link/0]).
--export([new_producer/2, singleton_producer/2]).
+-export([singleton_consumer/2, singleton_producer/2]).
 
 
 %% gen_server callbacks
@@ -28,10 +26,15 @@
 
 -define(SERVER, ?MODULE).
 
-new_producer(#topic{} = Topic, Options) ->
-  pulserl_producer:create(Topic, Options);
-new_producer(TopicName, Options) ->
-  new_producer(topic_utils:parse(TopicName), Options).
+singleton_consumer(TopicName, Options) ->
+  Topic = topic_utils:parse(TopicName),
+  case ets:lookup(pulserl_consumers, topic_utils:to_string(Topic)) of
+    [] ->
+      gen_server:call(?SERVER, {new_consumer, Topic, Options}, 32000);
+    Prods ->
+      {_, Pid} = erlwater_collection:random_select(Prods),
+      {ok, Pid}
+  end.
 
 
 singleton_producer(TopicName, Options) ->
@@ -53,10 +56,19 @@ start_link() ->
 init([]) ->
   {ok, #state{}}.
 
+handle_call({new_consumer, Topic, Options}, _From, State) ->
+  case ets:lookup(pulserl_consumers, topic_utils:to_string(Topic)) of
+    [] ->
+      {reply, pulserl_consumer:create(Topic, Options), State};
+    Prods ->
+      {_, Pid} = erlwater_collection:random_select(Prods),
+      {reply, {ok, Pid}, State}
+  end;
+
 handle_call({new_producer, Topic, Options}, _From, State) ->
   case ets:lookup(pulserl_producers, topic_utils:to_string(Topic)) of
     [] ->
-      {reply, ?MODULE:new_producer(Topic, Options), State};
+      {reply, pulserl_producer:create(Topic, Options), State};
     Prods ->
       {_, Pid} = erlwater_collection:random_select(Prods),
       {reply, {ok, Pid}, State}
@@ -69,15 +81,17 @@ handle_cast(_Request, State) ->
   {noreply, State}.
 
 handle_info({producer_up, ProducerPid, Topic}, State) ->
-  case topic_utils:is_partitioned(Topic) of
-    false ->
-      ets:insert(pulserl_producers, {topic_utils:to_string(Topic), ProducerPid});
-    _ ->
-      ok
-  end,
+  ets:insert(pulserl_producers, {topic_utils:to_string(Topic), ProducerPid}),
   {noreply, State};
 handle_info({producer_down, ProducerPid, Topic}, State) ->
   ets:delete_object(pulserl_producers, {topic_utils:to_string(Topic), ProducerPid}),
+  {noreply, State};
+
+handle_info({consumer_up, ProducerPid, Topic}, State) ->
+  ets:insert(pulserl_consumers, {topic_utils:to_string(Topic), ProducerPid}),
+  {noreply, State};
+handle_info({consumer_down, ProducerPid, Topic}, State) ->
+  ets:delete_object(pulserl_consumers, {topic_utils:to_string(Topic), ProducerPid}),
   {noreply, State};
 
 handle_info(Info, State) ->
