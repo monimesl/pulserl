@@ -8,7 +8,6 @@
 -module(pulserl_producer).
 
 -include("pulserl.hrl").
--include("pulserl_topics.hrl").
 -include("pulsar_api.hrl").
 
 -behaviour(gen_server).
@@ -576,7 +575,7 @@ initialize(#state{topic = Topic} = State) ->
       initialize_self(State);
     _ ->
       case pulserl_client:get_partitioned_topic_meta(Topic) of
-        #partition_meta{partitions = PartitionCount} ->
+        #partitionMeta{partitions = PartitionCount} ->
           State2 = State#state{partition_count = PartitionCount},
           if PartitionCount == 0 ->
             initialize_self(State2);

@@ -7,7 +7,7 @@
 %%%-------------------------------------------------------------------
 -module(pulserl_instance_registry).
 
--include("pulserl_topics.hrl").
+-include("pulserl.hrl").
 
 -behaviour(gen_server).
 
@@ -59,7 +59,22 @@ init([]) ->
 handle_call({new_consumer, Topic, Options}, _From, State) ->
   case ets:lookup(pulserl_consumers, topic_utils:to_string(Topic)) of
     [] ->
-      {reply, pulserl_consumer:create(Topic, Options), State};
+      Reply = pulserl_consumer:create(Topic, Options),
+      case Reply of
+        {ok, _Pid} ->
+          %% If the broker has some unAck/unsent messages
+          %% and the consumer is created for the first time via
+          %% pulserl:consumer/1, sometimes the call returns without
+          %% consuming any messages. This is actually due to the fact
+          %% after the new consumer has been initialized, the message
+          %% load is asynchronous. Sleeping here a bit, will increases
+          %% the chances of having the message(s) arrived before we return
+          %% the consumer pid to the client. This is just a hack
+          timer:sleep(300);
+        _ ->
+          ok
+      end,
+      {reply, Reply, State};
     Prods ->
       {_, Pid} = erlwater_collection:random_select(Prods),
       {reply, {ok, Pid}, State}

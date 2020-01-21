@@ -8,6 +8,26 @@
 
 -define(UNDEF, undefined).
 
+-define(PERSISTENT_DOMAIN, <<"persistent">>).
+-define(NON_PERSISTENT_DOMAIN, <<"non-persistent">>).
+-define(PUBLIC_TENANT, <<"public">>).
+-define(DEFAULT_NAMESPACE, <<"default">>).
+
+-record(partitionMeta, {
+  partitions :: integer()
+}).
+
+-record(topic, {
+  domain = ?PERSISTENT_DOMAIN,
+  tenant = ?PUBLIC_TENANT,
+  namespace = ?DEFAULT_NAMESPACE,
+  local,
+
+  %%local
+  parent :: #topic{}
+}).
+
+
 -record(batch, {
   index = -1 :: integer(),
   size :: non_neg_integer()

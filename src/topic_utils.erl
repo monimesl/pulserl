@@ -7,7 +7,7 @@
 %%%-------------------------------------------------------------------
 -module(topic_utils).
 
--include("pulserl_topics.hrl").
+-include("pulserl.hrl").
 
 %% API
 -export([parse/1, to_string/1, partition_index/1, is_partitioned/1,
@@ -22,10 +22,10 @@ parse(Name) when is_binary(Name) ->
     case binary:match(Name, [<<"://">>]) of
       nomatch ->
         case binary:split(Name, <<"/">>, [global]) of
-          [_Tenant, _Namespace | _Name] ->
-            iolist_to_binary([?PERSISTENT_DOMAIN, "://", Name]);
           [_Namespace, _Name] ->
             iolist_to_binary([?PERSISTENT_DOMAIN, "://", ?PUBLIC_TENANT, "/", Name]);
+          [_Tenant, _Namespace | _Name] ->
+            iolist_to_binary([?PERSISTENT_DOMAIN, "://", Name]);
           [_Name] ->
             iolist_to_binary([?PERSISTENT_DOMAIN, "://", ?PUBLIC_TENANT, "/", ?DEFAULT_NAMESPACE, "/", Name]);
           _ -> error({bad_topic_name, "Name must be in the format <topic>, or "

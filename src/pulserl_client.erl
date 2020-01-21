@@ -11,7 +11,6 @@
 
 -include("pulserl.hrl").
 -include("pulsar_api.hrl").
--include("pulserl_topics.hrl").
 
 %% API
 -export([start_link/1, stop/0]).
@@ -202,7 +201,7 @@ get_partitioned_topic_meta(Topic,
       {{error, {Error, Msg}}, State};
     #'CommandPartitionedTopicMetadataResponse'{
       partitions = Partitions} ->
-      {#partition_meta{partitions = Partitions}, State};
+      {#partitionMeta{partitions = Partitions}, State};
     {error, Reason} ->
       {{error, Reason}, State}
   end.
