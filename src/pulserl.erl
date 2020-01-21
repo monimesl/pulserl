@@ -171,6 +171,7 @@ await(Tag, Timeout) ->
   end.
 
 
+%%% public only for demo purpose
 start_consumption_in_background(TopicOrPid) ->
   spawn(fun() -> do_consume(TopicOrPid) end).
 
