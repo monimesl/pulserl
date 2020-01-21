@@ -43,7 +43,6 @@
 
 -record(messageMeta, {
   event_time :: integer() | ?UNDEF,
-  delivery_time :: integer() | ?UNDEF,
   redelivery_count :: integer() | ?UNDEF
 }).
 

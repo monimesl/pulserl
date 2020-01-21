@@ -48,7 +48,6 @@ new_message(Topic, MessageId, #'MessageMetadata'{} = Meta, Value, RedeliveryCoun
     properties = Meta#'MessageMetadata'.properties,
     metadata = #messageMeta{
       event_time = Meta#'MessageMetadata'.event_time,
-      delivery_time = Meta#'MessageMetadata'.deliver_at_time,
       redelivery_count = RedeliveryCount}
   }.
 
