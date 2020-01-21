@@ -180,6 +180,8 @@ do_consume(PidOrTopic) ->
     #consumerMessage{message = #message{value = Value}} = ConsumerMsg ->
       _ = ack(ConsumerMsg),
       error_logger:info_msg("Consumer Received: ~p", [Value]);
+    {error, _} = Error ->
+      error(Error);
     _ ->
       ok
   end,

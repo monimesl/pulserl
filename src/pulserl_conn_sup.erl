@@ -28,7 +28,7 @@ init([]) ->
     #{
       id => pulserl_conn,
       start => {pulserl_conn, start_link, []},
-      restart => permanent,
+      restart => transient,
       shutdown => 10000,
       type => worker,
       modules => [pulserl_conn]
