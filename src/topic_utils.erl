@@ -22,7 +22,7 @@ parse(Name) when is_binary(Name) ->
     case binary:match(Name, [<<"://">>]) of
       nomatch ->
         case binary:split(Name, <<"/">>, [global]) of
-          [_Tenant, _Namespace, _Name] ->
+          [_Tenant, _Namespace | _Name] ->
             iolist_to_binary([?PERSISTENT_DOMAIN, "://", Name]);
           [_Namespace, _Name] ->
             iolist_to_binary([?PERSISTENT_DOMAIN, "://", ?PUBLIC_TENANT, "/", Name]);
