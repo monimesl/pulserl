@@ -178,7 +178,7 @@ do_consume(PidOrTopic) ->
   case consume(PidOrTopic, 10) of
     #consumerMessage{message = #message{value = Value}} = ConsumerMsg ->
       _ = ack(ConsumerMsg),
-      error_logger:info_msg("Received: ~p", [Value]);
+      error_logger:info_msg("Consumer Received: ~p", [Value]);
     _ ->
       ok
   end,
