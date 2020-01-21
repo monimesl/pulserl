@@ -1,8 +1,11 @@
-# Pulserl - Apache Pulsar client for Erlang/Elixir
+# Pulserl 
+#### An Apache Pulsar client for Erlang/Elixir
+__Version:__ 0.1.0
 
 Pulserl is an Erlang client for the Apache Pulsar Pub/Sub system with both producer and consumer implementations.
+It requires version __2.0+__ of Apache Pulsar and __19.0+__ of Erlang 
 
-### Quick Examples
+## Quick Examples
 
 The examples assume you have a running Pulsar broker at `localhost:6650`, a topic called `test-topic` (can be partitioned or not) and `rebar3` installed.
 
@@ -39,3 +42,5 @@ _Note: Pulserl uses `default` and `Exlcusive` as the default subscription name a
              partition = -1,batch = undefined}
 
 ```
+
+## Overview
