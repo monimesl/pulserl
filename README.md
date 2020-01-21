@@ -12,7 +12,7 @@ The examples assume you have a running Pulsar broker at `localhost:6650`, a topi
 Fetch, compile and start the erlang shell.
 
 _Note: Pulserl uses `default` and `Exlcusive` as the default subscription name and type.
- So, if that subscription (not the consumer) under the topic `test-topic` does not exists, we make sure to create it first by creating
+ So, if that subscription (not the consumer) under the topic `test-topic` does not exists, we make sure in this example to create it first by creating
  the consumer before producing any message to the topic._
 
 ```
@@ -21,8 +21,8 @@ _Note: Pulserl uses `default` and `Exlcusive` as the default subscription name a
   rebar3 shell
   rr(pulserl).  %% load the api records
   
-  %% A demo function to log the value of consumed messages.
-  %% This will log the value of the messages produce below 
+  %% A demo function to log the value of consumed messages
+  %% that will be produced blow.
   pulserl:start_consumption_in_background("test-topic").
 
   %% Asycnhrounous produce
