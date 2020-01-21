@@ -2,11 +2,9 @@
 
 Pulserl is an Erlang client for the Apache Pulsar Pub/Sub system with both producer and consumer implementations.
 
-### WARNING: Pulserl is currently in progress. Consider current implementations as _beta_
-
 ### Quick Examples
 
-*The examples assume you have a running Pulsar broker at `localhost:6650`, a topic called `test-topic` (can be partitioned or not) and `rebar3` installed.*
+The examples assume you have a running Pulsar broker at `localhost:6650`, a topic called `test-topic` (can be partitioned or not) and `rebar3` installed.
 
 Fetch, compile and start the erlang shell.
 
