@@ -14,6 +14,7 @@
 -export([produce/2, produce/3, produce/4]).
 -export([sync_produce/2, sync_produce/3]).
 -export([consume/1, consume/2, ack/1, ack_cumulative/1, negative_ack/1]).
+-export([start_consumption_in_background/1]).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -168,3 +169,17 @@ await(Tag, Timeout) ->
   after Timeout ->
     {error, timeout}
   end.
+
+
+start_consumption_in_background(TopicOrPid) ->
+  spawn(fun() -> do_consume(TopicOrPid) end).
+
+do_consume(PidOrTopic) ->
+  case consume(PidOrTopic, 10) of
+    #consumerMessage{message = #message{value = Value}} = ConsumerMsg ->
+      _ = ack(ConsumerMsg),
+      error_logger:info_msg("Received: ~p", [Value]);
+    _ ->
+      ok
+  end,
+  do_consume(PidOrTopic).

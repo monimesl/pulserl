@@ -166,7 +166,7 @@ init([#topic{} = Topic, Opts]) ->
     subscription = proplists:get_value(subscription_name, Opts, "default"),
     initial_position = proplists:get_value(initial_position, Opts, ?POS_LATEST),
     acknowledgment_interval = proplists:get_value(acknowledgments_interval, Opts, 100),
-    subscription_type = proplists:get_value(subscription_type, Opts, ?SHARED_SUBSCRIPTION),
+    subscription_type = proplists:get_value(subscription_type, Opts, ?EXCLUSIVE_SUBSCRIPTION),
     max_pending_acknowledgments = proplists:get_value(max_pending_acknowledgments, Opts, 1000),
     queue_refill_threshold = erlang:min(proplists:get_value(queue_refill_threshold, Opts, QueueSize div 2), 1),
     %% Negative Ack
@@ -259,12 +259,12 @@ handle_call(_Request, _From, State) ->
 handle_cast({close, AttemptRestart}, State) ->
   case AttemptRestart of
     true ->
-      error_logger:info_msg("Temporariliy closing consumer(~p) as: ~p",
+      error_logger:info_msg("Temporariliy closing consumer(~p) with subscription [~p]",
         [self(), State#state.subscription]),
       State2 = close_children(State, AttemptRestart),
       {noreply, try_reinitialize(State2#state{state = ?UNDEF})};
     _ ->
-      error_logger:info_msg("Consumer(~p) as: ~p is permanelty closing",
+      error_logger:info_msg("Consumer(~p) with subscription [~p] is permanelty closing",
         [self(), State#state.subscription]),
       {close, normal, close_children(State, AttemptRestart)}
   end;
@@ -729,7 +729,7 @@ subscribe_to_topic(State) ->
     {error, _} = Err ->
       Err;
     #'CommandSuccess'{} ->
-      error_logger:info_msg("Consumer: ~p as: ~s subscribed to topic: ~p",
+      error_logger:info_msg("Consumer: ~p with subscription [~s] subscribed to topic: ~s",
         [self(), State#state.subscription, topic_utils:to_string(State#state.topic)]),
       State#state{state = ?STATE_READY}
   end.
