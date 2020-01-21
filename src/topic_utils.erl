@@ -22,27 +22,26 @@ parse(Name) when is_binary(Name) ->
     case binary:match(Name, [<<"://">>]) of
       nomatch ->
         case binary:split(Name, <<"/">>, [global]) of
-          [_Name] ->
-            iolist_to_binary([?PERSISTENT_DOMAIN, "://", ?PUBLIC_TENANT, "/", ?DEFAULT_NAMESPACE, "/", Name]);
           [_Tenant, _Namespace, _Name] ->
             iolist_to_binary([?PERSISTENT_DOMAIN, "://", Name]);
-          [_Tenant, _Cluster, _Namespace, _Name] ->
-            iolist_to_binary([?PERSISTENT_DOMAIN, "://", Name]);
+          [_Namespace, _Name] ->
+            iolist_to_binary([?PERSISTENT_DOMAIN, "://", ?PUBLIC_TENANT, "/", Name]);
+          [_Name] ->
+            iolist_to_binary([?PERSISTENT_DOMAIN, "://", ?PUBLIC_TENANT, "/", ?DEFAULT_NAMESPACE, "/", Name]);
           _ -> error({bad_topic_name, "Name must be in the format <topic>, or "
-          "<tenant>/[<cluster>/]<namespace>/<topic>"}, [Name])
+          "[<tenant>/]<namespace>/<topic>"}, [Name])
         end;
       _ -> Name
     end,
   case binary:split(CompleteName, <<"://">>) of
     [Domain, Rest] ->
       case binary:split(Rest, <<"/">>, [global]) of
-        [Tenant, Namespace, LocalName] ->
-          #topic{domain = Domain, tenant = Tenant,
+        [Namespace, LocalName] ->
+          #topic{domain = Domain, tenant = ?PUBLIC_TENANT,
             namespace = Namespace, local = LocalName};
-        [Tenant, Cluster, Namespace | LocalName] ->
+        [Tenant, Namespace | LocalName] ->
           #topic{domain = Domain, tenant = Tenant,
-            cluster = Cluster, namespace = Namespace,
-            local = iolist_to_binary(join(LocalName, <<"/">>))};
+            namespace = Namespace, local = iolist_to_binary(join(LocalName, <<"/">>))};
         _ ->
           error(bad_topic_name, [CompleteName])
       end;
@@ -105,14 +104,9 @@ to_string(Topic) when is_binary(Topic) ->
 to_string(Topic) when is_list(Topic) ->
   iolist_to_binary(Topic);
 
-to_string(#topic{domain = Domain, cluster = Cluster,
+to_string(#topic{domain = Domain,
   tenant = Tenant, namespace = Namespace, local = LocalName}) ->
-  Result =
-    case Cluster of
-      undefined -> [Domain, "://", Tenant, "/", Namespace, "/", LocalName];
-      Cl -> [Domain, "://", Tenant, "/", Cl, "/", Namespace, "/", LocalName]
-    end,
-  iolist_to_binary(Result).
+  iolist_to_binary([Domain, "://", Tenant, "/", Namespace, "/", LocalName]).
 
 %%%===================================================================
 %%% Internal functions

@@ -18,7 +18,6 @@
 -record(topic, {
 	domain = ?PERSISTENT_DOMAIN,
 	tenant = ?PUBLIC_TENANT,
-	cluster = undefined,
 	namespace = ?DEFAULT_NAMESPACE,
 	local,
 
