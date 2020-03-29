@@ -188,9 +188,9 @@ handle_info({'DOWN', MonitorRef, process, MonitoredPid, _}, State) ->
     _ ->
       %% Oops! The dead process is a consumer/producer. Whatever it is, remove it.
       RemovalFun = fun(_, Pid) -> MonitoredPid /= Pid end,
-      Producer = dict:erase(RemovalFun, State#state.producers),
+      Producers = dict:filter(RemovalFun, State#state.producers),
       Consumers = dict:filter(RemovalFun, State#state.consumers),
-      State#state{consumers = Consumers, producers = Producer}
+      State#state{consumers = Consumers, producers = Producers}
   end,
   {noreply, NewState};
 
