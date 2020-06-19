@@ -48,7 +48,7 @@ new_message(Topic, MessageId, #'MessageMetadata'{} = Meta, Value, RedeliveryCoun
     properties = Meta#'MessageMetadata'.properties,
     metadata = #messageMeta{
       event_time = Meta#'MessageMetadata'.event_time,
-      redelivery_count = RedeliveryCount}
+      redelivery_count = if is_integer(RedeliveryCount) -> RedeliveryCount; true -> 0 end}
   }.
 
 new_message(Topic, MessageId, #'MessageMetadata'{} = Meta, #'SingleMessageMetadata'{} = SingleMeta, Value, RedeliveryCount) ->

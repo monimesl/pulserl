@@ -108,9 +108,14 @@ try_receive_from_all_if_any([Child | Rest]) ->
       Other
   end.
 
+send_message_to_dead_letter(Pid, Message) ->
+  gen_server:call(Pid, {send_to_dead_letter_topic, Message}).
+
+
 -define(SERVER, ?MODULE).
 -define(STATE_READY, ready).
--define(TRIGGER_ACKS, trigger_acks).
+-define(SEND_ACKNOWLEDGMENTS, send_acknowledgments).
+-define(ACKNOWLEDGMENT_TIMEOUT, acknowledgment_timeout).
 
 -define(ERROR_CONSUMER_CLOSED, {error, consumer_closed}).
 -define(ERROR_CONSUMER_NOT_READY, {error, consumer_not_ready}).
@@ -132,7 +137,7 @@ try_receive_from_all_if_any([Child | Rest]) ->
   options :: list(),
   topic :: #topic{},
   %%
-  parent_pid :: pid(),
+  parent_consumer :: pid(),
   init_count = 0, %% Number of times the initialization has ran
   re_init_timer,
   flow_permits = 0,
@@ -140,18 +145,28 @@ try_receive_from_all_if_any([Child | Rest]) ->
   queue_refill_threshold = 1000,
   last_dequeued_message_id,
   message_queue = queue:new() :: queue:queue(),
+  %% Dead Letter Policy
+  dead_letter_topic_producer :: pid(),
+  dead_letter_topic_messages = ?UNDEF :: #{},
+  dead_letter_topic_max_redeliver_count :: integer(),
+  dead_letter_topic_name :: string(),
+  retry_letter_topic_name :: string(),
+
   next_consumer_partition = 0,
   %%% For acknowledgements
   batch_ack_trackers = #{} :: #{},
-  un_acked_messages = sets:new(),
+  un_ack_message_ids = sets:new(),
+
+  acknowledgment_timeout_timer :: reference(),
+  acknowledgment_timeout = 100 :: non_neg_integer(),
 
   neg_acknowledgment_delay = 100,  %% Must be >= 100
   neg_acknowledgment_messages = [],
-  neg_acknowledgment_interval = 100 :: non_neg_integer(),
-  neg_acknowledgment_interval_timer,
+  neg_acknowledgment_redelivery_timer :: reference(),
+  neg_acknowledgment_redelivery_delay = 100 :: non_neg_integer(),
 
-  acknowledgment_interval = 100 :: non_neg_integer(),
-  acknowledgment_interval_timer,
+  acknowledgments_send_timer :: reference(),
+  acknowledgments_send_tick = 100 :: non_neg_integer(),
   max_pending_acknowledgments = 1000 :: non_neg_integer(),
   pending_acknowledgments = gb_sets:new() %%% Note :: The ids need to be sorted.
 }).
@@ -163,30 +178,53 @@ try_receive_from_all_if_any([Child | Rest]) ->
 
 init([#topic{} = Topic, Opts]) ->
   process_flag(trap_exit, true),
+  ParentConsumer = proplists:get_value(parent_consumer, Opts),
   QueueSize = erlang:max(proplists:get_value(queue_size, Opts, 1000), 1),
+  SubscriptionName = proplists:get_value(subscription_name, Opts, "pulserl"),
+  SubscriptionType = proplists:get_value(subscription_type, Opts, ?SHARED_SUBSCRIPTION),
   NegAckDelay = erlang:max(proplists:get_value(neg_acknowledgment_delay, Opts, 100), 100),
+  DeadLetterMaxRedeliveryCount = erlang:max(proplists:get_value(dead_letter_topic_max_redeliver_count, Opts, 0), 0),
   State = #state{
     topic = Topic,
     options = Opts,
     queue_size = QueueSize,
-    parent_pid = proplists:get_value(parent_pid, Opts),
+    parent_consumer = ParentConsumer,
+    subscription = SubscriptionName,
+    subscription_type = SubscriptionType,
     consumer_name = proplists:get_value(consumer_name, Opts),
-    subscription = proplists:get_value(subscription_name, Opts, "default"),
     initial_position = proplists:get_value(initial_position, Opts, ?POS_LATEST),
-    acknowledgment_interval = proplists:get_value(acknowledgments_interval, Opts, 100),
-    subscription_type = proplists:get_value(subscription_type, Opts, ?KEY_SHARED_SUBSCRIPTION),
+    acknowledgments_send_tick = proplists:get_value(acknowledgments_send_tick, Opts, 100),
     max_pending_acknowledgments = proplists:get_value(max_pending_acknowledgments, Opts, 1000),
     queue_refill_threshold = erlang:min(proplists:get_value(queue_refill_threshold, Opts, QueueSize div 2), 1),
+    %% Ack
+    acknowledgment_timeout = erlang:max(proplists:get_value(acknowledgment_timeout, Opts, 100), 100),
     %% Negative Ack
     neg_acknowledgment_delay = NegAckDelay,
-    neg_acknowledgment_interval = NegAckDelay div 4
+    neg_acknowledgment_redelivery_delay = NegAckDelay div 4,
+    %% Dead Letter Policy
+    dead_letter_topic_max_redeliver_count = DeadLetterMaxRedeliveryCount,
+    dead_letter_topic_name =
+    if ParentConsumer == ?UNDEF ->
+      dead_letter_topic_name(Opts, Topic, SubscriptionName);
+      true ->
+        ?UNDEF
+    end,
+    dead_letter_topic_messages =
+    if DeadLetterMaxRedeliveryCount > 0 andalso is_pid(ParentConsumer)
+      andalso SubscriptionType == ?SHARED_SUBSCRIPTION ->
+      #{};
+      true ->
+        %% Disable
+        ?UNDEF
+    end
   },
   case initialize(State) of
     {error, Reason} ->
       {stop, Reason};
-    NewState ->
-      NewState1 = start_acknowledgment_timer(NewState),
-      {ok, notify_instance_provider_of_state(NewState1, consumer_up)}
+    State1 ->
+      State2 = start_acknowledgments_send_timer(State1),
+      State3 = start_acknowledgment_timeout_timer(State2),
+      {ok, notify_instance_provider_of_state(State3, consumer_up)}
   end.
 
 handle_call(_, _From, #state{state = ?UNDEF} = State) ->
@@ -198,7 +236,7 @@ handle_call({acknowledge, _, true}, _From, #state{subscription_type = ?SHARED_SU
 
 %% The parent
 handle_call({acknowledge, #messageId{topic = Topic} = MsgId, _Cumulative},
-    _From, #state{parent_pid = ?UNDEF, partition_count = Pc, topic = ParentTopic} = State) when Pc > 0 ->
+    _From, #state{parent_consumer = ?UNDEF, partition_count = Pc, topic = ParentTopic} = State) when Pc > 0 ->
   case topic_utils:partition_of(ParentTopic, Topic) of
     false ->
       {reply, ?ERROR_CONSUMER_ID_NOT_KNOWN_HERE, State};
@@ -224,7 +262,7 @@ handle_call({acknowledge, #messageId{topic = TopicStr} = MsgId, Cumulative}, _Fr
 
 %% The parent
 handle_call({negative_acknowledge, #messageId{topic = Topic} = MsgId},
-    _From, #state{parent_pid = ?UNDEF, partition_count = Pc, topic = ParentTopic} = State) when Pc > 0 ->
+    _From, #state{parent_consumer = ?UNDEF, partition_count = Pc, topic = ParentTopic} = State) when Pc > 0 ->
   case topic_utils:partition_of(ParentTopic, Topic) of
     false ->
       {reply, ?ERROR_CONSUMER_ID_NOT_KNOWN_HERE, State};
@@ -273,6 +311,9 @@ handle_call({seek, Target}, _From, #state{partition_count = Pc} = State) ->
     end,
   {reply, Res, State};
 
+handle_call({send_to_dead_letter_topic, Message}, _From, State) ->
+  {Reply, State2} = do_send_to_dead_letter_topic(Message, State),
+  {reply, Reply, State2};
 
 handle_call(_Request, _From, State) ->
   {reply, ok, State}.
@@ -347,17 +388,22 @@ handle_info(connection_down, State) ->
 
 %% Starts the schedulers again
 handle_info(connection_up, State) ->
-  NewState = try_reinitialize(State),
-  {noreply, start_acknowledgment_timer(NewState)};
+  State2 = try_reinitialize(State),
+  State3 = start_acknowledgments_send_timer(State2),
+  {noreply, State3};
 
 %% Last re-initialization failed. Try again!!
 handle_info(try_reinitialize, State) ->
   {noreply, try_reinitialize(State)};
 
 handle_info(redeliver_neg_ack_messages, State) ->
-  {noreply, trigger_redelivery_of_neg_ack_messages(State)};
+  {noreply, trigger_redelivery_of_neg_acknowledgements(State)};
 
-handle_info(?TRIGGER_ACKS, State) ->
+handle_info(?ACKNOWLEDGMENT_TIMEOUT, State) ->
+  State2 = send_message_to_dead_letter_topic(State),
+  {noreply, start_acknowledgment_timeout_timer(State2)};
+
+handle_info(?SEND_ACKNOWLEDGMENTS, State) ->
   NewState =
     case do_send_pending_acknowledgements(State) of
       #state{} = State2 ->
@@ -365,7 +411,7 @@ handle_info(?TRIGGER_ACKS, State) ->
       _ ->
         State
     end,
-  {noreply, start_acknowledgment_timer(NewState)};
+  {noreply, start_acknowledgments_send_timer(NewState)};
 
 handle_info({'EXIT', Pid, Reason}, State) ->
   case Reason of
@@ -393,7 +439,9 @@ code_change(_OldVsn, State, _Extra) ->
 cancel_all_timers(#state{} = State) ->
   State#state{
     re_init_timer = do_cancel_timer(State#state.re_init_timer),
-    acknowledgment_interval_timer = do_cancel_timer(State#state.acknowledgment_interval_timer)
+    acknowledgment_timeout_timer = do_cancel_timer(State#state.acknowledgment_timeout_timer),
+    acknowledgments_send_timer = do_cancel_timer(State#state.acknowledgments_send_timer),
+    neg_acknowledgment_redelivery_timer = do_cancel_timer(State#state.neg_acknowledgment_redelivery_timer)
   }.
 
 do_cancel_timer(?UNDEF) ->
@@ -402,11 +450,18 @@ do_cancel_timer(TimeRef) ->
   erlang:cancel_timer(TimeRef).
 
 
-start_acknowledgment_timer(#state{acknowledgment_interval = 0} = State) ->
+start_acknowledgments_send_timer(#state{acknowledgments_send_tick = 0} = State) ->
   State;
-start_acknowledgment_timer(#state{acknowledgment_interval = Interval} = State) ->
-  Timer = erlang:send_after(Interval, self(), ?TRIGGER_ACKS),
-  State#state{acknowledgment_interval_timer = Timer}.
+start_acknowledgments_send_timer(#state{acknowledgments_send_tick = Interval} = State) ->
+  Timer = erlang:send_after(Interval, self(), ?SEND_ACKNOWLEDGMENTS),
+  State#state{acknowledgments_send_timer = Timer}.
+
+start_acknowledgment_timeout_timer(#state{acknowledgment_timeout = 0} = State) ->
+  State;
+start_acknowledgment_timeout_timer(#state{acknowledgment_timeout = Interval} = State) ->
+  Timer = erlang:send_after(Interval, self(), ?ACKNOWLEDGMENT_TIMEOUT),
+  State#state{acknowledgment_timeout_timer = Timer}.
+
 
 redirect_to_the_child_partition(#messageId{partition = Partition}, State) ->
   case choose_partition_consumer(Partition, State) of
@@ -419,52 +474,55 @@ redirect_to_the_child_partition(#messageId{partition = Partition}, State) ->
 handle_negative_acknowledgement(#messageId{} = MsgId,
     #state{
       neg_acknowledgment_delay = NegAckDelay,
-      neg_acknowledgment_interval_timer = NegAckTimer,
+      neg_acknowledgment_redelivery_timer = NegAckTimer,
       neg_acknowledgment_messages = NegAckMessages} = State) ->
   NegAckMsg = {erlwater_time:milliseconds() + NegAckDelay, MsgId},
   NewState0 = State#state{neg_acknowledgment_messages = [NegAckMsg | NegAckMessages]},
   NewState1 = untrack_message(MsgId, false, NewState0),
   if NegAckTimer == ?UNDEF ->
-    set_new_neg_ack_redelivery_timer(NewState1);
+    set_new_unack_redelivery_timer(NewState1);
     true ->
       NewState1
   end.
 
-set_new_neg_ack_redelivery_timer(#state{
-  neg_acknowledgment_interval = NegAckInterval} = State) ->
+set_new_unack_redelivery_timer(#state{
+  neg_acknowledgment_redelivery_delay = NegAckInterval} = State) ->
   TimerRef = erlang:send_after(NegAckInterval, self(), redeliver_neg_ack_messages),
-  State#state{neg_acknowledgment_interval_timer = TimerRef}.
+  State#state{neg_acknowledgment_redelivery_timer = TimerRef}.
 
 
-trigger_redelivery_of_neg_ack_messages(#state{
-  neg_acknowledgment_messages = NegAckMessages} = State) ->
+trigger_redelivery_of_neg_acknowledgements(State) ->
+  State2 = send_message_to_dead_letter_topic(State),
+  trigger_redelivery_of_neg_ack_messages1(State2).
+
+trigger_redelivery_of_neg_ack_messages1(State) ->
   NowMillis = erlwater_time:milliseconds(),
-  {MessagesToRedeliver, RestOfNegAcks} = lists:partition(
+  {MessagesToRedeliver, RestOfNegAcknowledgments} = lists:partition(
     fun({WakeUpTime, _MsgId}) ->
       WakeUpTime =< NowMillis
-    end, NegAckMessages),
-  NewState = State#state{neg_acknowledgment_messages = RestOfNegAcks},
-  NewState2 = redeliver_un_acked_messages([MsgId || {_, MsgId} <- MessagesToRedeliver], NewState),
-  if RestOfNegAcks /= [] ->
-    set_new_neg_ack_redelivery_timer(NewState2);
+    end, State#state.neg_acknowledgment_messages),
+  NewState = State#state{neg_acknowledgment_messages = RestOfNegAcknowledgments},
+  NewState2 = redeliver_un_ack_messages([MsgId || {_, MsgId} <- MessagesToRedeliver], NewState),
+  if RestOfNegAcknowledgments /= [] ->
+    set_new_unack_redelivery_timer(NewState2);
     true ->
       %% Close the timer; a new timer will be set on a neg_ack
-      NewState2#state{neg_acknowledgment_interval_timer = ?UNDEF}
+      NewState2#state{neg_acknowledgment_redelivery_timer = ?UNDEF}
   end.
 
 
-redeliver_un_acked_messages([], State) ->
+redeliver_un_ack_messages([], State) ->
   State;
-redeliver_un_acked_messages(MessageIds,
+redeliver_un_ack_messages(MessageIds,
     #state{connection = Cnx, consumer_id = ConsumerId} = State) ->
   Command =
     case State#state.subscription_type of
       ?SHARED_SUBSCRIPTION ->
-        commands:new_redeliver_un_acked_messages(ConsumerId, MessageIds);
+        commands:new_redeliver_un_ack_messages(ConsumerId, MessageIds);
       ?KEY_SHARED_SUBSCRIPTION ->
-        commands:new_redeliver_un_acked_messages(ConsumerId, MessageIds);
+        commands:new_redeliver_un_ack_messages(ConsumerId, MessageIds);
       _ ->
-        commands:new_redeliver_un_acked_messages(ConsumerId, [])
+        commands:new_redeliver_un_ack_messages(ConsumerId, [])
     end,
   case pulserl_conn:send_simple_command(Cnx, Command) of
     {error, _} = Error ->
@@ -502,15 +560,14 @@ handle_batch_acknowledgement(
         true ->
           %% All the batch `messageId` indices has been requested for ack or we've a cumulative ack.
           %% Now we commit the acknowledgment of their shared specific `messageId`.
-          NewState = send_acknowledgment(MsgId, Cumulative, State),
-          NewState2 = untrack_message(MsgId, Cumulative, NewState),
-          NewBatchTrackers = maps:remove(TrackerKey, NewState2#state.batch_ack_trackers),
-          {ok, NewState2#state{batch_ack_trackers = NewBatchTrackers}};
+          State2 = send_acknowledgment(MsgId, Cumulative, State),
+          State3 = untrack_message(MsgId, Cumulative, State2),
+          {ok, remove_from_batch_tracker(MsgId, State3)};
         false ->
-          NewState = untrack_message(MsgId, Cumulative, State),
+          State2 = untrack_message(MsgId, Cumulative, State),
           %% The batch is not empty or the acknowledgement is not cumulative,
-          NewBatchTracker = maps:put(TrackerKey, NewIndicesTracker, NewState#state.batch_ack_trackers),
-          {ok, NewState#state{batch_ack_trackers = NewBatchTracker}}
+          NewBatchTracker = maps:put(TrackerKey, NewIndicesTracker, State2#state.batch_ack_trackers),
+          {ok, State2#state{batch_ack_trackers = NewBatchTracker}}
       end;
     _ ->
       %% If we don't see the tracker, it means its has been
@@ -525,7 +582,7 @@ send_acknowledgment(MsgId, true, State) ->
   %% Don't delay cumulative ack. Send it now
   do_send_ack_now(MsgId, true, State);
 send_acknowledgment(MsgId, Cumulative,
-    #state{acknowledgment_interval = 0} = State) ->
+    #state{acknowledgments_send_tick = 0} = State) ->
   %% No ack timer set. Send it now
   do_send_ack_now(MsgId, Cumulative, State);
 send_acknowledgment(MsgId, Cumulative,
@@ -536,11 +593,11 @@ send_acknowledgment(MsgId, Cumulative,
 %% Ack timer/max pending is set
 send_acknowledgment(MsgId, _Cumulative,
     #state{
-      pending_acknowledgments = PendingAcks,
+      pending_acknowledgments = PendingAcknowledgments,
       max_pending_acknowledgments = MaxPendingAcknowledgments} = State) ->
-  PendingAcks2 = gb_sets:add(MsgId, PendingAcks),
-  NewState = State#state{pending_acknowledgments = PendingAcks2},
-  case gb_sets:size(PendingAcks2) >= MaxPendingAcknowledgments of
+  PendingAcknowledgments2 = gb_sets:add(MsgId, PendingAcknowledgments),
+  NewState = State#state{pending_acknowledgments = PendingAcknowledgments2},
+  case gb_sets:size(PendingAcknowledgments2) >= MaxPendingAcknowledgments of
     true ->
       do_send_pending_acknowledgements(NewState);
     _ ->
@@ -549,18 +606,24 @@ send_acknowledgment(MsgId, _Cumulative,
 
 do_send_ack_now(#messageId{} = MsgId, Cumulative,
     #state{consumer_id = ConsumerId} = State) ->
+  NewState =
+    case State#state.dead_letter_topic_messages of
+      ?UNDEF -> State;
+      Map ->
+        State#state{dead_letter_topic_messages = maps:remove(MsgId, Map)}
+    end,
   AckSendCommand = commands:new_ack(ConsumerId, MsgId, Cumulative),
-  send_actual_command(AckSendCommand, [MsgId], State).
+  send_actual_command(AckSendCommand, [MsgId], NewState).
 
 do_send_pending_acknowledgements(
     #state{
       consumer_id = ConsumerId,
-      pending_acknowledgments = PendingAcks} = State) ->
-  case gb_sets:is_empty(PendingAcks) of
+      pending_acknowledgments = PendingAcknowledgments} = State) ->
+  case gb_sets:is_empty(PendingAcknowledgments) of
     true ->
       State;
     _ ->
-      MessageIds = gb_sets:to_list(PendingAcks),
+      MessageIds = gb_sets:to_list(PendingAcknowledgments),
       AckSendCommand = commands:new_ack(ConsumerId, MessageIds),
       NewState = send_actual_command(AckSendCommand, MessageIds, State),
       NewState#state{pending_acknowledgments = gb_sets:new()}
@@ -600,38 +663,137 @@ handle_receive_message(#state{message_queue = MessageQueue} = State) ->
 
 
 handle_messages(MetadataAndMessages, State) ->
-  NewMessageQueue = lists:foldl(
-    fun(MetadataAndMessage, MessageQueue) ->
-      case add_received_message_to_queue(MetadataAndMessage, MessageQueue) of
-        {_, NewMessageQueue0} ->
-          NewMessageQueue0
+  {NewMessageQueue, DeadLetterMsgMap} = lists:foldl(
+    fun(MetadataAndMessage, {MsgQueue, DeadLetterMsgMap}) ->
+      MsgQueue1 = add_to_received_message_queue(MetadataAndMessage, MsgQueue, State),
+      DeadLetterMsgMap1 = add_to_dead_letter_message_map(MetadataAndMessage, DeadLetterMsgMap, State),
+      {MsgQueue1, DeadLetterMsgMap1}
+    end, {State#state.message_queue, State#state.dead_letter_topic_messages}, MetadataAndMessages),
+  State#state{message_queue = NewMessageQueue, dead_letter_topic_messages = DeadLetterMsgMap}.
+
+
+%% @Todo Remove `compacted_out` messages
+add_to_received_message_queue({_, Message}, MessageQueue, State) ->
+  #'messageMeta'{redelivery_count = RedeliveryCount} = Message#'message'.metadata,
+  if RedeliveryCount > State#state.dead_letter_topic_max_redeliver_count ->
+    MessageQueue;
+    true ->
+      queue:in(Message, MessageQueue)
+  end.
+
+%% Dead Letter Policy not enable
+add_to_dead_letter_message_map(_MetadataAndMessage, ?UNDEF, _State) ->
+  ?UNDEF;
+add_to_dead_letter_message_map({_, #'message'{id = MsgId, metadata = #'messageMeta'{
+  redelivery_count = RedeliveryCount}} = Msg}, DeadLetterMsgMap,
+    State) ->
+  if RedeliveryCount > State#state.dead_letter_topic_max_redeliver_count ->
+    Messages = [Msg | maps:get(MsgId, DeadLetterMsgMap, [])],
+    maps:put(MsgId, Messages, DeadLetterMsgMap);
+    true ->
+      DeadLetterMsgMap
+  end.
+
+send_message_to_dead_letter_topic(#state{dead_letter_topic_messages = ?UNDEF} = State) ->
+  State;
+send_message_to_dead_letter_topic(#state{subscription_type = SubType} = State)
+  when SubType /= ?SHARED_SUBSCRIPTION ->
+  State;
+send_message_to_dead_letter_topic(State) ->
+  MessageCount = maps:size(State#state.dead_letter_topic_messages),
+  if MessageCount > 0 ->
+    send_message_to_dead_letter_topic1(State);
+    true ->
+      State
+  end.
+
+send_message_to_dead_letter_topic1(State) ->
+  maps:fold(
+    fun(_MsgId, Messages, State2) ->
+      send_message_to_dead_letter_topic2(Messages, State2)
+    end, State, State#state.dead_letter_topic_messages).
+
+send_message_to_dead_letter_topic2(Messages, State) when is_list(Messages) ->
+  lists:foldl(fun send_message_to_dead_letter_topic3/2, State, Messages).
+
+send_message_to_dead_letter_topic3(Message,
+    #state{parent_consumer = ParentConsumer} = State) ->
+  if is_pid(ParentConsumer) ->
+    case send_message_to_dead_letter(ParentConsumer, Message) of
+      ok ->
+        ack_and_clean_dead_letter_message(Message, State);
+      _ ->
+        State
+    end;
+    true ->
+      {_, State2} = do_send_to_dead_letter_topic(Message, State),
+      State2
+  end.
+
+do_send_to_dead_letter_topic(Message,
+    #state{
+      dead_letter_topic_name = Topic,
+      dead_letter_topic_producer = ProducerPid} = State) ->
+  %% Child/Non-Partitioned consumer
+  if is_pid(ProducerPid) ->
+    do_send_to_dead_letter_topic1(Message, State);
+    true ->
+      case pulserl_producer:create(Topic, []) of
+        {ok, Pid} ->
+          State2 = State#state{dead_letter_topic_producer = Pid},
+          do_send_to_dead_letter_topic1(Message, State2);
+        {error, Reason} ->
+          error_logger:error_msg("Error creating dead letter topic: ~p "
+          "from consumer: ~p. Reason: ~p", [Topic, self(), Reason]),
+          State
       end
-    end, State#state.message_queue, MetadataAndMessages),
-  State#state{message_queue = NewMessageQueue}.
+  end.
+
+do_send_to_dead_letter_topic1(Message, State) ->
+  Topic = State#state.dead_letter_topic_name,
+  ProducerPid = State#state.dead_letter_topic_producer,
+  #message{key = Key, value = Value, properties = Props} = Message,
+  ProdMessage = pulserl_producer:new_message(Key, Value, Props),
+  case pulserl_producer:sync_produce(ProducerPid, ProdMessage) of
+    {error, Reason} = Result ->
+      Topic = State#state.dead_letter_topic_name,
+      error_logger:error_msg("Error sending to dead letter topic: ~p "
+      "from consumer: ~p. Reason: ~p", [Topic, self(), Reason]),
+      Result;
+    _ ->
+      {ok, ack_and_clean_dead_letter_message(Message, State)}
+  end.
 
 
-%% @Todo Don't add `compacted_out` messages
-add_received_message_to_queue({#'SingleMessageMetadata'{}, Message}, MessageQueue) ->
-  {true, queue:in(Message, MessageQueue)};
+ack_and_clean_dead_letter_message(_,
+    #state{connection = ?UNDEF} = State) ->
+  State;
+ack_and_clean_dead_letter_message(#message{id = MsgId}, State) ->
+  State2 = untrack_message(MsgId, false, State),
+  State3 = remove_from_batch_tracker(MsgId, State2),
+  do_send_ack_now(MsgId, false, State3).
 
-add_received_message_to_queue({_, Message}, MessageQueue) ->
-  {true, queue:in(Message, MessageQueue)}.
 
 track_message(#messageId{} = MsgId, State) ->
-  NewUnAckedMgs = sets:add_element(MsgId, State#state.un_acked_messages),
-  State#state{un_acked_messages = NewUnAckedMgs}.
+  NewUnAckMgs = sets:add_element(MsgId, State#state.un_ack_message_ids),
+  State#state{un_ack_message_ids = NewUnAckMgs}.
+
+remove_from_batch_tracker(MsgId, State) ->
+  TrackerKey = message_id_2_batch_ack_tracker_key(MsgId),
+  NewBatchTrackers = maps:remove(TrackerKey, State#state.batch_ack_trackers),
+  State#state{batch_ack_trackers = NewBatchTrackers}.
 
 untrack_message(#messageId{} = MsgId, false, State) ->
-  NewUnAckedMgs = sets:del_element(MsgId, State#state.un_acked_messages),
-  State#state{un_acked_messages = NewUnAckedMgs};
+  NewUnAcknowledgeMsgIds = sets:del_element(MsgId, State#state.un_ack_message_ids),
+  State#state{un_ack_message_ids = NewUnAcknowledgeMsgIds};
 
 untrack_message(#messageId{} = MsgId, _Cumulative, State) ->
   %% Remove all message ids up to the specified message id
-  NewUnAckedMgs = sets:filter(
+  UnAcknowledgeMsgIds = sets:filter(
     fun(MsgId0) ->
       MsgId0 > MsgId
-    end, State#state.un_acked_messages),
-  State#state{un_acked_messages = NewUnAckedMgs}.
+    end, State#state.un_ack_message_ids),
+  State#state{un_ack_message_ids = UnAcknowledgeMsgIds}.
 
 handle_message_error(MessageId, Error, State) ->
   error_logger:error_msg("Consumer message: ~p error: ~p",
@@ -828,7 +990,7 @@ create_inner_consumer(Index, State) ->
 create_inner_consumer(Retries, Index,
     #state{topic = Topic, options = Opts} = State) ->
   PartitionedTopic = topic_utils:new_partition(Topic, Index),
-  case pulserl_consumer:start_link(PartitionedTopic, [{parent_pid, self()} | Opts]) of
+  case pulserl_consumer:start_link(PartitionedTopic, [{parent_consumer, self()} | Opts]) of
     {ok, Pid} ->
       {Pid, State#state{
         partition_to_child = dict:store(Index, Pid, State#state.partition_to_child),
@@ -856,7 +1018,7 @@ foreach_child(Fun, State) when is_function(Fun) ->
 
 
 notify_instance_provider_of_state(
-    #state{topic = Topic, parent_pid = ParentPid} = State,
+    #state{topic = Topic, parent_consumer = ParentPid} = State,
     Event) ->
   if ParentPid == ?UNDEF ->
     %% Check whether this consumer is:
@@ -890,15 +1052,13 @@ to_pulsar_initial_pos(Pos) ->
     _ -> Pos
   end.
 
+
+
 validate_options(Options) when is_list(Options) ->
   erlwater_assertions:is_proplist(Options),
   lists:foreach(
-    fun({parent_pid, _} = Opt) ->
+    fun({parent_consumer, _} = Opt) ->
       Opt;
-      ({consumer_name, _} = Opt) ->
-        erlwater_assertions:is_string(Opt);
-      ({subscription_name, _V} = Opt) ->
-        erlwater_assertions:is_string(Opt);
       ({initial_position, V} = _Opt) ->
         case V of
           ?POS_LATEST ->
@@ -909,10 +1069,6 @@ validate_options(Options) when is_list(Options) ->
             ok;
           _ -> error({invalid_initial_position, V}, [Options])
         end;
-      ({acknowledgments_interval, _} = Opt) ->
-        erlwater_assertions:is_positive_int(Opt);
-      ({max_pending_acknowledgments, _} = Opt) ->
-        erlwater_assertions:is_non_negative_int(Opt);
       ({subscription_type, V} = _Opt) ->
         case V of
           ?SHARED_SUBSCRIPTION ->
@@ -925,6 +1081,26 @@ validate_options(Options) when is_list(Options) ->
             ok;
           _ -> error({invalid_subscription_type, V}, [Options])
         end;
+      ({queue_size, _} = Opt) ->
+        erlwater_assertions:is_positive_int(Opt);
+      ({consumer_name, _} = Opt) ->
+        erlwater_assertions:is_string(Opt);
+      ({subscription_name, _V} = Opt) ->
+        erlwater_assertions:is_string(Opt);
+      ({acknowledgments_send_tick, _} = Opt) ->
+        erlwater_assertions:is_positive_int(Opt);
+      ({max_pending_acknowledgments, _} = Opt) ->
+        erlwater_assertions:is_non_negative_int(Opt);
+      ({queue_refill_threshold, _} = Opt) ->
+        erlwater_assertions:is_non_negative_int(Opt);
+      ({acknowledgment_timeout, _} = Opt) ->
+        erlwater_assertions:is_non_negative_int(Opt);
+      ({neg_acknowledgment_delay, _} = Opt) ->
+        erlwater_assertions:is_non_negative_int(Opt);
+      ({dead_letter_topic_name, _} = Opt) ->
+        erlwater_assertions:is_string(Opt);
+      ({dead_letter_topic_max_redeliver_count, _} = Opt) ->
+        erlwater_assertions:is_non_negative_int(Opt);
       (Opt) ->
         error(unknown_consumer_options, [Opt])
     end,
@@ -961,3 +1137,10 @@ generate_consumer_id(#state{consumer_id = ?UNDEF}, Pid) ->
   pulserl_conn:register_handler(Pid, self(), consumer);
 generate_consumer_id(#state{consumer_id = Id}, _Pid) ->
   Id.
+
+dead_letter_topic_name(Opts, Topic, SubscriptionName) ->
+  case proplists:get_value(dead_letter_topic_name, Opts) of
+    ?UNDEF -> binary_to_list(topic_utils:to_string(Topic)) ++
+      "-" ++ SubscriptionName ++ "-DLQ";
+    Val -> Val
+  end.

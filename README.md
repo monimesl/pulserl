@@ -44,4 +44,27 @@ _Note: Pulserl uses `default` and `Exlcusive` as the default subscription name a
 ```
 
 ## Feature Matrix
-					
+
+ - [x] Partitioned topics 
+ - [x] Batching	
+ - [ ] Compression
+ - [x] TLS	
+ - [ ] Authentication	
+ - [ ] Reader API	
+ - [x] Proxy Support				
+ - [ ] Effectively-Once				
+ - [ ] Schema				
+ - [x] Consumer seek				
+ - [ ] Multi-topics consumer					
+ - [ ] Topics regex consumer					
+ - [ ] TCompacted topics						
+ - [x] User defined properties producer/consumer						
+ - [ ] Reader hasMessageAvailable						
+ - [ ] Hostname verification						
+ - [ ] Multi Hosts Service Url support						
+ - [x] Key_shared					
+ - [ ] key based batcher						
+ - [x] Negative Acknowledge							
+ - [x] Delayed Delivery Messages						
+ - [ ] Dead Letter Policy							
+ - [ ] Interceptors							

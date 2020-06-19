@@ -24,7 +24,7 @@
 
 %% Producer API
 -export([create/2, close/1, close/2]).
--export([produce/3, sync_produce/3, new_message/1, new_message/2, new_message/3, new_message/4, new_message/5]).
+-export([produce/3, sync_produce/2, sync_produce/3, new_message/1, new_message/2, new_message/3, new_message/4, new_message/5]).
 
 
 %%--------------------------------------------------------------------
@@ -61,6 +61,9 @@ produce(Pid, #prodMessage{} = Message, Callback) ->
 
 %% @end
 %%--------------------------------------------------------------------
+sync_produce(Pid, #prodMessage{} = Message) ->
+  sync_produce(Pid, Message, ?UNDEF).
+
 sync_produce(Pid, #prodMessage{} = Message, ?UNDEF) ->
   sync_produce(Pid, Message, timer:seconds(10));
 
