@@ -11,7 +11,7 @@ The examples assume you have a running Pulsar broker at `localhost:6650`, a topi
 
 Fetch, compile and start the erlang shell.
 
-_Note: Pulserl uses `default` and `Exlcusive` as the default subscription name and type.
+_Note: Pulserl uses `pulserl` and `Shared` as the default subscription name and type.
  So, if that subscription (not the consumer) under the topic `test-topic` does not exists, we make sure in this example to create it first by creating
  the consumer before producing any message to the topic._
 
