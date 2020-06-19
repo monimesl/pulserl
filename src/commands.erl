@@ -20,7 +20,7 @@
 -export([encode/1, decode/1, new_send/8, parse_metadata/1]).
 
 -export([has_messages_in_batch/1, read_size/1]).
--export([new_connect/0, new_lookup_topic/2, new_partitioned_topic_meta/1, new_ack/2, new_ack/3, new_redeliver_un_acked_messages/2]).
+-export([new_connect/0, new_lookup_topic/2, new_partitioned_topic_meta/1, new_ack/2, new_ack/3, new_redeliver_un_acked_messages/2, new_seek/2]).
 
 -export([encode/3, wrap_to_base_command/1, get_request_id/1, set_request_id/2, to_4bytes/1, encode_to_2bytes/1]).
 
@@ -98,6 +98,17 @@ has_messages_in_batch(#'MessageMetadata'{num_messages_in_batch = NumOfBatchMessa
 read_size(<<Size:32/unsigned-integer, Rest/binary>>) ->
   {Size, Rest}.
 
+new_seek(ConsumerId, {LedgerId, EntryId}) ->
+  #'CommandSeek'{
+    consumer_id = ConsumerId,
+    message_id = #'MessageIdData'{ledgerId = LedgerId, entryId = EntryId}
+  };
+
+new_seek(ConsumerId, Timestamp) when is_integer(Timestamp) ->
+  #'CommandSeek'{
+    consumer_id = ConsumerId,
+    message_publish_time = Timestamp
+  }.
 
 new_send(ProducerId, ProducerName, SequenceId, PartitionKey, EventTime, NumMessages, DeliverAtTime, Payload) ->
   SendCmd = #'CommandSend'{
@@ -250,6 +261,8 @@ to_type_and_field_pos(#'CommandPong'{}) ->
   {'PONG', #'BaseCommand'.pong};
 to_type_and_field_pos(#'CommandAck'{}) ->
   {'ACK', #'BaseCommand'.ack};
+to_type_and_field_pos(#'CommandSeek'{}) ->
+  {'SEEK', #'BaseCommand'.seek};
 to_type_and_field_pos(#'CommandRedeliverUnacknowledgedMessages'{}) ->
   {'REDELIVER_UNACKNOWLEDGED_MESSAGES', #'BaseCommand'.redeliverUnacknowledgedMessages};
 to_type_and_field_pos(Command) ->

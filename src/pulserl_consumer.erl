@@ -17,7 +17,10 @@
 -export([start_link/2]).
 %% Consumer API
 -export([create/2, close/1, close/2]).
--export([receive_message/1, acknowledge/2, acknowledge/3, negative_acknowledge/2]).
+-export([seek/2]).
+-export([receive_message/1]).
+-export([acknowledge/2, acknowledge/3]).
+-export([negative_acknowledge/2]).
 
 %% gen_server callbacks
 -export([init/1,
@@ -55,20 +58,25 @@ acknowledge(Pid, #'message'{id = MessageId}, Cumulative) ->
   acknowledge(Pid, MessageId, Cumulative);
 
 acknowledge(Pid, #'messageId'{} = MessageId, Cumulative) ->
-  case gen_server:call(Pid, {acknowledge, MessageId, Cumulative}) of
-    {redirect, ChildConsumerPid} ->
-      acknowledge(ChildConsumerPid, MessageId, Cumulative);
-    Other ->
-      Other
-  end.
+  call(Pid, {acknowledge, MessageId, Cumulative}).
 
 negative_acknowledge(Pid, #'message'{id = MessageId}) ->
   negative_acknowledge(Pid, MessageId);
 
 negative_acknowledge(Pid, #messageId{} = MessageId) ->
-  case gen_server:call(Pid, {negative_acknowledge, MessageId}) of
+  call(Pid, {negative_acknowledge, MessageId}).
+
+seek(Pid, Time) when is_pid(Pid) andalso is_integer(Time) ->
+  gen_server:call(Pid, {seek, Time});
+
+seek(Pid, {LedgerId, EntryId} = MsgId) when is_pid(Pid) andalso is_integer(LedgerId) andalso is_integer(EntryId) ->
+  gen_server:call(Pid, {seek, MsgId}).
+
+
+call(Pid, Message) ->
+  case gen_server:call(Pid, Message) of
     {redirect, ChildConsumerPid} ->
-      negative_acknowledge(ChildConsumerPid, MessageId);
+      call(ChildConsumerPid, Message);
     Other ->
       Other
   end.
@@ -166,7 +174,7 @@ init([#topic{} = Topic, Opts]) ->
     subscription = proplists:get_value(subscription_name, Opts, "default"),
     initial_position = proplists:get_value(initial_position, Opts, ?POS_LATEST),
     acknowledgment_interval = proplists:get_value(acknowledgments_interval, Opts, 100),
-    subscription_type = proplists:get_value(subscription_type, Opts, ?EXCLUSIVE_SUBSCRIPTION),
+    subscription_type = proplists:get_value(subscription_type, Opts, ?KEY_SHARED_SUBSCRIPTION),
     max_pending_acknowledgments = proplists:get_value(max_pending_acknowledgments, Opts, 1000),
     queue_refill_threshold = erlang:min(proplists:get_value(queue_refill_threshold, Opts, QueueSize div 2), 1),
     %% Negative Ack
@@ -238,10 +246,9 @@ handle_call({negative_acknowledge, #messageId{topic = TopicStr} = MsgId}, _From,
 handle_call(receive_message, _From,
     #state{partition_count = PartitionCount} = State) when PartitionCount > 0 ->
   %% This consumer is the partition parent.
-  %% We choose a child consumer and redirect
-  %% the client to it.
+  %% Redirect the client to all the consumers.
   {Replay, NextState} =
-    case choose_partition_consumers(?UNDEF, State) of
+    case get_all_partition_consumers(?UNDEF, State) of
       {[], NewState} ->
         {?ERROR_CONSUMER_NOT_READY, NewState};
       {Pids, NewState} ->
@@ -253,20 +260,40 @@ handle_call(receive_message, _From, #state{} = State) ->
   {reply, Reply, NewState};
 
 
+handle_call({seek, Target}, _From, #state{partition_count = Pc} = State) ->
+  Res =
+    if Pc == 0 ->
+      Command = commands:new_seek(State#state.consumer_id, Target),
+      pulserl_conn:send_simple_command(State#state.connection, Command);
+      true ->
+        foreach_child(
+          fun(Pid) ->
+            seek(Pid, Target)
+          end, State)
+    end,
+  {reply, Res, State};
+
+
 handle_call(_Request, _From, State) ->
   {reply, ok, State}.
 
-handle_cast({close, AttemptRestart}, State) ->
-  case AttemptRestart of
+handle_cast({close, AttemptRestart}, #state{partition_count = PartitionCount} = State) ->
+  if AttemptRestart ->
+    NewState =
+      if PartitionCount > 0 ->
+        error_logger:info_msg("Restarting ~p partitioned consumers of ~p",
+          [PartitionCount, self()]),
+        close_children(State);
+        true ->
+          error_logger:info_msg("Restarting consumer(~p) with subscription [~p]",
+            [self(), State#state.subscription]),
+          try_reinitialize(State)
+      end,
+    {noreply, NewState};
     true ->
-      error_logger:info_msg("Temporariliy closing consumer(~p) with subscription [~p]",
-        [self(), State#state.subscription]),
-      State2 = close_children(State, AttemptRestart),
-      {noreply, try_reinitialize(State2#state{state = ?UNDEF})};
-    _ ->
       error_logger:info_msg("Consumer(~p) with subscription [~p] is permanelty closing",
         [self(), State#state.subscription]),
-      {close, normal, close_children(State, AttemptRestart)}
+      {close, normal, close_children(State)}
   end;
 
 handle_cast(Request, State) ->
@@ -664,11 +691,11 @@ try_reinitialize(State) ->
       error_logger:error_msg("Re-initialization failed: ~p", [Reason]),
       State#state{re_init_timer = erlang:send_after(500, self(), try_reinitialize)};
     NewState ->
-      NewState#state{state = ?STATE_READY}
+      NewState
   end.
 
 initialize(#state{topic = Topic} = State) ->
-  Value =
+  Result =
     case topic_utils:is_partitioned(Topic) of
       true ->
         initialize_self(State);
@@ -684,10 +711,10 @@ initialize(#state{topic = Topic} = State) ->
           {error, _} = Error -> Error
         end
     end,
-  case Value of
+  case Result of
     #state{} = NewState ->
-      NewState#state{init_count = State#state.init_count + 1};
-    _ -> Value
+      NewState#state{state = ?STATE_READY};
+    _ -> Result
   end.
 
 initialize_self(#state{topic = Topic} = State) ->
@@ -695,14 +722,14 @@ initialize_self(#state{topic = Topic} = State) ->
     LogicalAddress when is_list(LogicalAddress) ->
       case pulserl_client:get_broker_connection(LogicalAddress) of
         {ok, Pid} ->
-          Id = pulserl_conn:register_handler(Pid, self(), consumer),
+          Id = generate_consumer_id(State, Pid),
           case subscribe_to_topic(State#state{
             connection = Pid, consumer_id = Id
           }) of
-            #state{init_count = 0} = NewState ->
-              send_flow_permits(NewState);
             #state{} = NewState ->
-              NewState;
+              send_flow_permits(NewState#state{
+                init_count = State#state.init_count + 1,
+                flow_permits = 0});
             {error, _} = Error ->
               Error
           end;
@@ -731,7 +758,7 @@ subscribe_to_topic(State) ->
     #'CommandSuccess'{} ->
       error_logger:info_msg("Consumer: ~p with subscription [~s] subscribed to topic: ~s",
         [self(), State#state.subscription, topic_utils:to_string(State#state.topic)]),
-      State#state{state = ?STATE_READY}
+      State
   end.
 
 send_flow_permits(#state{queue_size = QueueSize} = State) ->
@@ -786,12 +813,11 @@ initialize_children(#state{partition_count = Total} = State) ->
       end
     end, {State, ?UNDEF}, lists:seq(0, Total - 1)),
   case Err of
-    ?UNDEF ->
-      %% Initialize the parent straight away
-      NewState#state{state = ?STATE_READY};
-    {error, _} = Err ->
+    {error, _} ->
       [pulserl_consumer:close(Pid, false) || {_, Pid} <- dict:fetch_keys(NewState#state.child_to_partition)],
-      Err
+      Err;
+    ?UNDEF ->
+      NewState
   end.
 
 
@@ -815,15 +841,19 @@ create_inner_consumer(Retries, Index,
       end
   end.
 
-close_children(State, AttemptRestart) ->
-  lists:foreach(
+close_children(State) ->
+  foreach_child(
     fun(Pid) ->
-      pulserl_consumer:close(Pid, AttemptRestart)
-    end, dict:fetch_keys(State#state.child_to_partition)),
+      pulserl_consumer:close(Pid, false)
+    end, State),
   State#state{
     child_to_partition = dict:new(),
     partition_to_child = dict:new()
   }.
+
+foreach_child(Fun, State) when is_function(Fun) ->
+  lists:foreach(Fun, dict:fetch_keys(State#state.child_to_partition)).
+
 
 notify_instance_provider_of_state(
     #state{topic = Topic, parent_pid = ParentPid} = State,
@@ -906,7 +936,7 @@ choose_partition_consumer(Partition, State) ->
   dict:find(Partition, State#state.partition_to_child).
 
 
-choose_partition_consumers(undefined,
+get_all_partition_consumers(undefined,
     #state{partition_count = PartitionCount, next_consumer_partition = NextPartition} = State) ->
   PrioritizePartition = NextPartition rem State#state.partition_count,
   OtherPartitions = lists:foldl(
@@ -925,3 +955,9 @@ choose_partition_consumers(undefined,
       end
     end, [], [PrioritizePartition | OtherPartitions]),
   {Pids, State#state{next_consumer_partition = NextPartition + 1}}.
+
+
+generate_consumer_id(#state{consumer_id = ?UNDEF}, Pid) ->
+  pulserl_conn:register_handler(Pid, self(), consumer);
+generate_consumer_id(#state{consumer_id = Id}, _Pid) ->
+  Id.

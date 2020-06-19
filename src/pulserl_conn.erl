@@ -42,7 +42,7 @@
 %%%===================================================================
 
 send_simple_command(Pid, Command) when is_tuple(Command) ->
-  gen_server:call(Pid, {send_command, Command}, timer:seconds(10)).
+  gen_server:call(Pid, {send_command, Command}, timer:seconds(120)).
 
 send_payload_command(Pid, Command, Metadata, Payload) when is_tuple(Command) ->
   gen_server:cast(Pid, {send_command, {payload, Command, Metadata, Payload}}).
