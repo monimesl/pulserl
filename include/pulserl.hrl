@@ -22,11 +22,9 @@
   tenant = ?PUBLIC_TENANT,
   namespace = ?DEFAULT_NAMESPACE,
   local,
-
   %%local
   parent :: #topic{}
 }).
-
 
 -record(batch, {
   index = -1 :: integer(),
@@ -60,10 +58,19 @@
   event_time = erlwater_time:milliseconds() :: integer(),
   properties = [] :: map(),
   value :: binary(),
-  replicate = true :: binary()
+  deliverAtTime :: integer() | ?UNDEF
 }).
 
 -record(consumerMessage, {
   consumer :: pid(),
   message :: #message{}
 }).
+
+-record(clientConfig, {
+  service_url :: string(),
+  enable_tcp_no_delay :: boolean(),
+  enable_tcp_keep_alive :: boolean(),
+  connect_timeout_ms :: pos_integer(),
+  max_connections_per_broker :: pos_integer(),
+  tls_enable :: boolean(),
+  cacertfile :: string() | ?UNDEF}).

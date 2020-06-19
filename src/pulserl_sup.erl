@@ -10,19 +10,17 @@
 
 -behaviour(supervisor).
 
--export([start_link/0]).
+-export([start_link/1]).
 
 -export([init/1]).
 
 -define(SERVER, ?MODULE).
 
-start_link() ->
-  supervisor:start_link({local, ?SERVER}, ?MODULE, []).
+start_link(ClientConfig) ->
+  supervisor:start_link({local, ?SERVER}, ?MODULE, [ClientConfig]).
 
 
-init([]) ->
-  ServiceUrl = pulserl_utils:get_env(service_url, def_service_url()),
-  application:set_env(pulserl, service_url, ServiceUrl),
+init([ClientConfig]) ->
   SupFlags = #{strategy => one_for_all,
     intensity => 0,
     period => 1},
@@ -58,7 +56,7 @@ init([]) ->
     },
     #{
       id => pulserl_client,
-      start => {pulserl_client, start_link, [ServiceUrl]},
+      start => {pulserl_client, start_link, [ClientConfig]},
       restart => permanent,
       shutdown => 10000,
       type => worker,
@@ -67,8 +65,3 @@ init([]) ->
   ],
   {ok, {SupFlags, ChildSpecs}}.
 
-%% internal functions
-
-def_service_url() ->
-  {ok, Hostname} = inet:gethostname(),
-  "pulsar://" ++ Hostname ++ ":6650".

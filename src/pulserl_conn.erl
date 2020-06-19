@@ -71,6 +71,7 @@ start_link(Args) ->
 -record(state, {
   state,
   socket,
+  socket_module,
   data_buffer = <<>>,
   socket_address,
   logical_address,
@@ -93,18 +94,27 @@ start_link(Args) ->
 
 
 init(Opts) ->
+  TcpOptions = [
+    {nodelay, proplists:get_value(nodelay, Opts, true)},
+    {keepalive, proplists:get_value(keepalive, Opts, true)}
+  ],
+  {SockMod, TcpOptions2} =
+    case proplists:get_value(tls_enable, Opts, false) of
+      true ->
+        CaCertFile = proplists:get_value(cacertfile, Opts),
+        {ssl, [{cacertfile, CaCertFile} | TcpOptions]};
+      _ -> {gen_tcp, TcpOptions}
+    end,
   State = #state{
-    logical_address = proplists:get_value(logical_address, Opts),
-    tcp_options = [
-      {nodelay, proplists:get_value(nodelay, Opts, true)},
-      {keepalive, proplists:get_value(keepalive, Opts, true)}
-    ]
+    socket_module = SockMod,
+    tcp_options = TcpOptions2,
+    logical_address = proplists:get_value(address, Opts)
   },
   case create_connection(State) of
     {ok, NewState} ->
       case perform_handshake(NewState) of
         {ok, #state{socket = Socket} = Ns} ->
-          Socket2 = activate_socket(Socket),
+          Socket2 = activate_socket(Ns, Socket),
           {ok, notify_client_of_up(Ns#state{socket = Socket2})};
         {error, Reason} ->
           {stop, Reason}
@@ -165,7 +175,8 @@ handle_cast(Request, State) ->
 
 
 %% Info callback
-handle_info({tcp, Sock, Data}, #state{socket = Sock, data_buffer = DataBuffer} = State) ->
+handle_info({Msg, Sock, Data}, #state{socket = Sock, data_buffer = DataBuffer} = State)
+  when Msg == tcp orelse Msg == ssl ->
   NewDataBuffer = iolist_to_binary([DataBuffer, Data]),
   NewState = State#state{data_buffer = NewDataBuffer},
   {noreply, handle_broker_data(NewState)};
@@ -175,7 +186,8 @@ handle_info({timeout, TimerRef, reconnect},
   error_logger:info_msg("Reconnecting to ~s", [LogicalAddress]),
   {noreply, reconnect_process(State)};
 
-handle_info({tcp_closed, Sock}, #state{socket = Sock} = State) ->
+handle_info({Msg, Sock}, #state{socket = Sock} = State)
+  when Msg == tcp_closed orelse Msg == ssl_closed ->
   {noreply, broadcast_error_then_reconnect({error, ?LOST_CONNECTION_ERROR}, State)};
 
 handle_info({'DOWN', MonitorRef, process, MonitoredPid, _}, State) ->
@@ -433,8 +445,8 @@ do_send_internal(Command, RequestId, State) ->
   RequestData = commands:encode(Command),
   do_send_internal2(RequestData, RequestId, State).
 
-do_send_internal2(RequestData, RequestId, #state{socket = Sock} = State) ->
-  case gen_tcp:send(Sock, RequestData) of
+do_send_internal2(RequestData, RequestId, #state{socket = Sock, socket_module = SockMod} = State) ->
+  case SockMod:send(Sock, RequestData) of
     ok ->
       if RequestId /= false ->
         {noreply, RequestId, State};
@@ -460,7 +472,7 @@ reconnect_process(State) ->
               {ok, #state{socket = Socket} = Ns} ->
                 error_logger:info_msg("Connection to ~s is re-established!",
                   [Ns#state.logical_address]),
-                notify_client_of_up(Ns#state{socket = activate_socket(Socket)});
+                notify_client_of_up(Ns#state{socket = activate_socket(Ns, Socket)});
               {error, _} ->
                 ok
             end;
@@ -472,28 +484,28 @@ reconnect_process(State) ->
     _ -> schedule_reconnect_process(State)
   end.
 
-create_connection(#state{logical_address = LogicalAddress} = State) ->
-  Addresses = pulserl_utils:logical_to_physical_addresses(LogicalAddress),
+create_connection(#state{logical_address = LogicalAddress, socket_module = SockMod} = State) ->
+  Addresses = pulserl_utils:logical_to_physical_addresses(LogicalAddress, SockMod == ssl),
   connect_to_brokers(State, Addresses).
 
 
 connect_to_brokers(State, [{IpAddress, Port} | T]) ->
-  Result = connect_to_broker(State, IpAddress, Port, 2),
+  Result = connect_to_broker(State, IpAddress, Port, 3),
   case T of
     [] -> Result;
     _ -> connect_to_brokers(State, T)
   end.
 
 
-connect_to_broker(State, IpAddress, Port, Attempts) ->
+connect_to_broker(#state{socket_module = SockMod} = State, IpAddress, Port, Attempts) ->
   TcpOptions = [
     binary, {active, false}
     | State#state.tcp_options],
-  case gen_tcp:connect(IpAddress, Port, TcpOptions) of
+  case SockMod:connect(IpAddress, Port, TcpOptions) of
     {ok, Socket} ->
       {ok, State#state{
         socket_address = {IpAddress, Port},
-        socket = optimize_socket(Socket)}};
+        socket = optimize_socket(State, Socket)}};
     {error, Reason} ->
       error_logger:error_msg("Unable to connect to broker at: ~s. "
       "Reason: ~p", [pulserl_utils:sock_address_to_string(IpAddress, Port), Reason]),
@@ -506,13 +518,13 @@ connect_to_broker(State, IpAddress, Port, Attempts) ->
   end.
 
 
-perform_handshake(#state{socket = Socket} = State) ->
+perform_handshake(#state{socket = Socket, socket_module = SockMod} = State) ->
   ConnectCommand = commands:new_connect(),
   case send_internal(ConnectCommand, State) of
     {_, {error, Reason}, _} ->
       {error, Reason};
     {_, _, NewState} ->
-      case gen_tcp:recv(Socket, 0) of
+      case SockMod:recv(Socket, 0) of
         {ok, Data} ->
           {Command, _} = commands:decode(Data),
           case Command of
@@ -537,14 +549,16 @@ perform_handshake(#state{socket = Socket} = State) ->
   end.
 
 
-activate_socket(Sock) ->
-  ok = inet:setopts(Sock, [{active, true}]),
+activate_socket(State, Sock) ->
+  SockOptsMod = socket_option_module(State),
+  ok = SockOptsMod:setopts(Sock, [{active, true}]),
   Sock.
 
-optimize_socket(Sock) ->
-  {ok, [{sndbuf, SndBufferSize}, {recbuf, RecBufferSize}]} =
-    inet:getopts(Sock, [sndbuf, recbuf]), %% assert
-  ok = inet:setopts(Sock, [{buffer, max(RecBufferSize, SndBufferSize)}]),
+optimize_socket(State, Sock) ->
+  SockOptsMod = socket_option_module(State),
+  {ok, [{_, BufferSize1}, {_, BufferSize2}]} =
+    SockOptsMod:getopts(Sock, [sndbuf, recbuf]),
+  _ = SockOptsMod:setopts(Sock, [{buffer, max(BufferSize1, BufferSize2)}]),
   Sock.
 
 broadcast_error_then_reconnect(Error, State) ->
@@ -575,3 +589,8 @@ notify_parties(ConnectionState, Parties) ->
 
 safe_send(To, Msg) ->
   try To ! Msg catch _:_ -> Msg end.
+
+socket_option_module(#state{socket_module = gen_tcp}) ->
+  inet;
+socket_option_module(#state{socket_module = SockMode}) ->
+  SockMode.

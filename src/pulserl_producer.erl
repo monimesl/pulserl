@@ -24,7 +24,7 @@
 
 %% Producer API
 -export([create/2, close/1, close/2]).
--export([produce/3, sync_produce/3, new_message/1, new_message/2, new_message/3, new_message/4]).
+-export([produce/3, sync_produce/3, new_message/1, new_message/2, new_message/3, new_message/4, new_message/5]).
 
 
 %%--------------------------------------------------------------------
@@ -116,13 +116,16 @@ new_message(Key, Value, Properties) ->
 %% @end
 %%--------------------------------------------------------------------
 new_message(Key, Value, Properties, EventTime) ->
+  new_message(Key, Value, Properties, EventTime, ?UNDEF).
+
+new_message(Key, Value, Properties, EventTime, DeliverAtTime) ->
   Key2 = case Key of ?UNDEF -> <<>>; _ -> Key end,
   #prodMessage{
     key = erlwater:to_binary(Key2),
     value = erlwater:to_binary(Value),
     event_time = erlwater:to_integer(EventTime),
-    properties = Properties,
-    replicate = true
+    deliverAtTime = DeliverAtTime,
+    properties = Properties
   }.
 
 %%--------------------------------------------------------------------
@@ -362,7 +365,7 @@ choose_partition_producer(Key, State) ->
 %% @Todo add logic for blocking on queue full
 may_be_produce_message(Message, From, State) ->
   Request = {From, Message},
-  if State#state.batch_enable ->
+  if State#state.batch_enable andalso Message#prodMessage.deliverAtTime == ?UNDEF ->
     case add_to_pending_or_blocking(Request, State) of
       {notfull, NewBatchRequests} ->
         %% Was added but still the `pending_requests` has some space.
@@ -379,7 +382,7 @@ may_be_produce_message(Message, From, State) ->
         {ok, may_be_trigger_batch(State#state{batch_requests = NewBatchRequests})}
     end;
     true ->
-      %% Batching not enabled
+      %% No batching. Send directly
       {ok, send_message(Request, State)}
   end.
 
@@ -413,7 +416,7 @@ send_message({_, #prodMessage{value = Payload} = Msg} = Request,
   {SendCmd, Metadata} = commands:new_send(State#state.producer_id,
     State#state.producer_name, SeqId, Msg#prodMessage.key, Msg#prodMessage.event_time,
     %% `num_messages_in_batch` must be undefined for non-batch messages
-    ?UNDEF, Payload),
+    ?UNDEF, Msg#prodMessage.deliverAtTime, Payload),
   PendingRequests = dict:store(SeqId, [Request], State#state.pending_requests),
   NewState = State#state{sequence_id = SeqId + 1, pending_requests = PendingRequests},
   pulserl_conn:send_payload_command(Cnx, SendCmd, Metadata, Payload),
@@ -451,7 +454,7 @@ send_batch_messages(Batch, #state{
   [{_, FirstMsg} | _] = Batch,
   {SendCmd, Metadata} = commands:new_send(ProducerId, ProducerName, FinalSeqId,
     ?UNDEF, FirstMsg#prodMessage.event_time,
-    length(Batch), BatchPayload
+    length(Batch), ?UNDEF, BatchPayload
   ),
   PendingRequests = dict:store(FinalSeqId, Batch, State#state.pending_requests),
   NewState = State#state{sequence_id = FinalSeqId, pending_requests = PendingRequests},

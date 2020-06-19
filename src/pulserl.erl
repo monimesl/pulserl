@@ -120,6 +120,7 @@ consume(PidOrTopic) ->
 consume(PidOrTopic, Timeout) ->
   consume_until(PidOrTopic, erlwater_time:milliseconds() + Timeout).
 
+%% @Todo. Remove and implement polling inside the consumer
 consume_until(PidOrTopic, StoppingTime) ->
   if is_pid(PidOrTopic) ->
     case erlwater_time:milliseconds() < StoppingTime of
@@ -128,6 +129,7 @@ consume_until(PidOrTopic, StoppingTime) ->
           {ok, #message{} = Message} ->
             #consumerMessage{consumer = PidOrTopic, message = Message};
           {ok, false} ->
+            timer:sleep(10), %@Todo Will be remove. Avoid CPU Burst
             consume_until(PidOrTopic, StoppingTime);
           Other ->
             Other
@@ -176,7 +178,7 @@ start_consumption_in_background(TopicOrPid) ->
   spawn(fun() -> do_consume(TopicOrPid) end).
 
 do_consume(PidOrTopic) ->
-  case consume(PidOrTopic, 10) of
+  case consume(PidOrTopic, 100) of
     #consumerMessage{message = #message{value = Value}} = ConsumerMsg ->
       _ = ack(ConsumerMsg),
       error_logger:info_msg("Consumer Received: ~p", [Value]);

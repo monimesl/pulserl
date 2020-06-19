@@ -14,7 +14,7 @@
 -export([new_message_id/2, new_message_id/4, new_message/5, new_message/6]).
 
 %% API
--export([hash_key/2, get_int_env/2, get_env/2, resolve_uri/1, to_logical_address/2, sock_address_to_string/2, logical_to_physical_addresses/1]).
+-export([hash_key/2, get_int_env/2, get_env/2, resolve_uri/2, to_logical_address/3, sock_address_to_string/2, logical_to_physical_addresses/2]).
 
 new_message_id(Topic, #'MessageIdData'{} = MessageIdData) ->
   new_message_id(Topic, MessageIdData, -1, 0).
@@ -83,20 +83,20 @@ sock_address_to_string(Ip, Port) ->
   inet:ntoa(Ip) ++ ":" ++ integer_to_list(Port).
 
 
-to_logical_address(Hostname, Port) ->
-  maybe_prepend_scheme(Hostname ++ ":" ++ integer_to_list(Port)).
+to_logical_address(Hostname, Port, TlsEnable) ->
+  maybe_prepend_scheme(Hostname ++ ":" ++ integer_to_list(Port), TlsEnable).
 
-logical_to_physical_addresses(Address) when is_list(Address) ->
-  case resolve_uri(list_to_binary(Address)) of
+logical_to_physical_addresses(Address, TlsEnable) when is_list(Address) ->
+  case resolve_uri(list_to_binary(Address), TlsEnable) of
     {error, Reason} ->
       error({bad_address, Reason});
     {_, Addresses, Port, _} ->
-      [{Addrs, Port} || Addrs <- Addresses]
+      [{Host, Port} || Host <- Addresses]
   end.
 
-resolve_uri(Uri) ->
+resolve_uri(Uri, TlsEnable) ->
   Uri1 = string:trim(binary_to_list(Uri)),
-  Uri2 = maybe_prepend_scheme(Uri1),
+  Uri2 = maybe_prepend_scheme(Uri1, TlsEnable),
   case uri_string:parse(Uri2) of
     {error, _, _} ->
       {error, invalid_uri};
@@ -120,9 +120,14 @@ resolve_address(Hostname) ->
   end.
 
 
-maybe_prepend_scheme(Url) ->
+maybe_prepend_scheme(Url, TlsEnable) ->
   case string:str(Url, "//") of
-    0 -> "pulsar://" ++ Url;
+    0 ->
+      if TlsEnable ->
+        "pulsar+ssl://" ++ Url;
+        true ->
+          "pulsar://" ++ Url
+      end;
     _ -> Url
   end.
 

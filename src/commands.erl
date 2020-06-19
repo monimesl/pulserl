@@ -17,7 +17,7 @@
 -define(METADATA_LEN, 4).
 -define(MAGIC_NUMBER_LEN, 2).
 
--export([encode/1, decode/1, new_send/7, parse_metadata/1]).
+-export([encode/1, decode/1, new_send/8, parse_metadata/1]).
 
 -export([has_messages_in_batch/1, read_size/1]).
 -export([new_connect/0, new_lookup_topic/2, new_partitioned_topic_meta/1, new_ack/2, new_ack/3, new_redeliver_un_acked_messages/2]).
@@ -99,7 +99,7 @@ read_size(<<Size:32/unsigned-integer, Rest/binary>>) ->
   {Size, Rest}.
 
 
-new_send(ProducerId, ProducerName, SequenceId, PartitionKey, EventTime, NumMessages, Payload) ->
+new_send(ProducerId, ProducerName, SequenceId, PartitionKey, EventTime, NumMessages, DeliverAtTime, Payload) ->
   SendCmd = #'CommandSend'{
     sequence_id = SequenceId, producer_id = ProducerId},
   Metadata = #'MessageMetadata'{
@@ -107,8 +107,9 @@ new_send(ProducerId, ProducerName, SequenceId, PartitionKey, EventTime, NumMessa
     sequence_id = SequenceId,
     producer_name = ProducerName,
     partition_key = PartitionKey,
-    publish_time = erlwater_time:milliseconds(),
+    deliver_at_time = DeliverAtTime,
     uncompressed_size = byte_size(Payload),
+    publish_time = erlwater_time:milliseconds(),
     num_messages_in_batch = NumMessages %% Must be `undefined` for non-batch messages
   },
   {SendCmd, Metadata}.

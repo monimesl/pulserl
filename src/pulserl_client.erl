@@ -36,12 +36,12 @@
 }).
 
 -record(state, {
-  use_tls = false,
-  operation_timeout,
+  tls_enable,
+  cacertfile,
+  service_urls,
   connect_timeout_ms,
   enable_tcp_no_delay,
   enable_tcp_keep_alive,
-  service_urls,
   service_lookup_connection,
   max_connections_per_broker,
   cnx_lookup_current_pos = 0,
@@ -79,8 +79,8 @@ get_partitioned_topic_meta(#topic{} = Topic) ->
   gen_server:call(?SERVER, {get_partitioned_topic_meta, Topic}).
 
 
-start_link(Address) ->
-  gen_server:start_link({local, ?SERVER}, ?MODULE, [Address], []).
+start_link(Configs) ->
+  gen_server:start_link({local, ?SERVER}, ?MODULE, [Configs], []).
 
 
 stop() ->
@@ -92,44 +92,34 @@ stop() ->
 %%%===================================================================
 
 
-init(_args) ->
-  MaxConnectionsPerBroker = pulserl_utils:get_int_env(max_connections_per_broker, 1),
-  if MaxConnectionsPerBroker < 1 orelse MaxConnectionsPerBroker > 64 ->
-    error("The `max_connections_per_broker` value must respect the interval (0, 64]");
-    true ->
-      ok
-  end,
-  ConnectTimeoutMs = pulserl_utils:get_int_env(connect_timeout_ms, 15000),
-  OperationTimeout = pulserl_utils:get_int_env(operation_timeout, 30000),
-  EnableTcpKeepAlive = pulserl_utils:get_env(enable_tcp_keep_alive, true),
-  EnableTcpNoDelay = pulserl_utils:get_env(enable_tcp_no_delay, true),
-  ServiceUrl = pulserl_utils:get_env(service_url, ""),
-  case parse_and_resolve_service_url(ServiceUrl) of
+init([#clientConfig{tls_enable = TlsEnable, service_url = ServiceUrl} = Config]) ->
+  case parse_and_resolve_service_url(ServiceUrl, TlsEnable) of
     {error, Reason} ->
       {stop, Reason};
     Addresses ->
-      {ServiceUrls, PhysicalAddrs2Cnx, PhysicalAddrs2LogicalAddrs} = lists:foldl(
-        fun({Hostname, IpAddress, Port}, {Urls, PhysicalAddress2Conns0, PhysicalAddrs2LogicalAddrs0}) ->
-          LogicalAddress = pulserl_utils:to_logical_address(Hostname, Port),
+      {ServiceUrls, PhysicalAddress2CnxMap, Physical2LogicalAddressMap} = lists:foldl(
+        fun({Hostname, IpAddress, Port}, {Urls, PhysicalAddress2CnxMap0, Physical2LogicalAddressMap0}) ->
+          LogicalAddress = pulserl_utils:to_logical_address(Hostname, Port, TlsEnable),
           {
             sets:add_element(LogicalAddress, Urls),
-            maps:put({IpAddress, Port}, [], PhysicalAddress2Conns0),
-            maps:put({IpAddress, Port}, LogicalAddress, PhysicalAddrs2LogicalAddrs0)
+            maps:put({IpAddress, Port}, [], PhysicalAddress2CnxMap0),
+            maps:put({IpAddress, Port}, LogicalAddress, Physical2LogicalAddressMap0)
           }
         end, {sets:new(), #{}, #{}}, Addresses),
       ets:new(partition_pending_messages, [named_table, set, public,
         {read_concurrency, true}, {write_concurrency, true}]),
       State = #state{
         service_urls = sets:to_list(ServiceUrls),
-        max_connections_per_broker = MaxConnectionsPerBroker,
-        physical_address_2_connections = PhysicalAddrs2Cnx,
-        physical_address_2_logical_address = PhysicalAddrs2LogicalAddrs,
-        enable_tcp_keep_alive = EnableTcpKeepAlive,
-        enable_tcp_no_delay = EnableTcpNoDelay,
-        connect_timeout_ms = ConnectTimeoutMs,
-        operation_timeout = OperationTimeout
+        tls_enable = Config#clientConfig.tls_enable,
+        cacertfile = Config#clientConfig.cacertfile,
+        physical_address_2_connections = PhysicalAddress2CnxMap,
+        physical_address_2_logical_address = Physical2LogicalAddressMap,
+        max_connections_per_broker = Config#clientConfig.max_connections_per_broker,
+        enable_tcp_keep_alive = Config#clientConfig.enable_tcp_keep_alive,
+        enable_tcp_no_delay = Config#clientConfig.enable_tcp_no_delay,
+        connect_timeout_ms = Config#clientConfig.connect_timeout_ms
       },
-      LogicalAddresses = maps:values(PhysicalAddrs2LogicalAddrs),
+      LogicalAddresses = maps:values(Physical2LogicalAddressMap),
       case get_connection_to_one_of_these_logical_addresses(LogicalAddresses, State) of
         {Pid, LogicalAddr, NewState} ->
           erlang:register(?SERVICE_LOOKUP, Pid),
@@ -253,7 +243,7 @@ discover_address(Topic, Command, CnxPid, State) ->
 
 
 get_connection_to_one_of_these_logical_addresses([LogicalAddress | Rest], State) ->
-  PhysicalAddresses = pulserl_utils:logical_to_physical_addresses(LogicalAddress),
+  PhysicalAddresses = pulserl_utils:logical_to_physical_addresses(LogicalAddress, State#state.tls_enable),
   case get_connection(PhysicalAddresses, LogicalAddress, State) of
     {error, _} = Error ->
       if Rest /= [] ->
@@ -297,17 +287,17 @@ get_connection([PhysicalAddr | Rest], LogicalAddr,
   end.
 
 
-chose_broker_url(_PlainUrl, TlsUrl, #state{use_tls = true}) ->
+chose_broker_url(_PlainUrl, TlsUrl, #state{tls_enable = true}) ->
   TlsUrl;
 chose_broker_url(PlainUrl, _TlsUrl, _State) ->
   PlainUrl.
 
-parse_and_resolve_service_url(ServiceUrl) ->
+parse_and_resolve_service_url(ServiceUrl, TlsEnable) ->
   ServiceUrl2 = erlwater:to_binary(ServiceUrl),
   URIs = binary:split(ServiceUrl2, <<",">>, [global]),
   Ls = lists:map(
     fun(Uri) ->
-      case pulserl_utils:resolve_uri(Uri) of
+      case pulserl_utils:resolve_uri(Uri, TlsEnable) of
         {Hostname, [Address | _], Port, _} ->
           {Hostname, Address, Port};
         Other ->
@@ -328,10 +318,13 @@ create_connection(LogicalAddress, #state{} = State) when is_binary(LogicalAddres
   create_connection(binary_to_list(LogicalAddress), State);
 create_connection(LogicalAddress, #state{} = State) ->
   ConnOpts = [
+    {address, LogicalAddress},
+    {tls_enable, State#state.tls_enable},
+    {tls_cacertfile, State#state.cacertfile},
     {nodelay, State#state.enable_tcp_no_delay},
     {keepalive, State#state.enable_tcp_keep_alive}
   ],
-  case pulserl_conn:create([{logical_address, LogicalAddress} | ConnOpts]) of
+  case pulserl_conn:create(ConnOpts) of
     {ok, CnxPid} ->
       %% To avoid race condition on new connection update,
       %% we retrieve the message here and do the update right away
@@ -378,17 +371,9 @@ update_physical_address_2_connections_map(PhysicalAddress, #cached_conn{} = Conn
     end,
     [Conn],
     State#state.physical_address_2_connections),
-  error_logger:info_msg("Pulsar connections updated. Before: ~p. Now: ~p",
-    [logical_address2connections(State#state.physical_address_2_connections, State#state.physical_address_2_logical_address),
-      logical_address2connections(PhysicalAddress2Connections, State#state.physical_address_2_logical_address)
-    ]),
+  error_logger:info_msg("Pulsar connections to broker ~p is incremented by ~p ", [
+    maps:get(PhysicalAddress, State#state.physical_address_2_logical_address),
+    (length(maps:get(PhysicalAddress, PhysicalAddress2Connections)) -
+      length(maps:get(PhysicalAddress, State#state.physical_address_2_connections)))
+  ]),
   State#state{physical_address_2_connections = PhysicalAddress2Connections}.
-
-
-logical_address2connections(Physical2Connections, Physical2LogicalAddresses) ->
-  maps:fold(
-    fun(PhysicalAddress, Connections, Acc) ->
-      LogicalAddress = maps:get(PhysicalAddress, Physical2LogicalAddresses),
-      maps:put(LogicalAddress, [{Pid, Active} || #cached_conn{pid = Pid, active = Active} <- Connections], Acc)
-    end, #{}, Physical2Connections).
-
