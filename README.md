@@ -49,22 +49,22 @@ _Note: Pulserl uses `default` and `Exlcusive` as the default subscription name a
  - [x] Batching	
  - [ ] Compression
  - [x] TLS	
- - [ ] Authentication	
+ - [ ] Authentication (soon)	
  - [ ] Reader API	
  - [x] Proxy Support				
  - [ ] Effectively-Once				
  - [ ] Schema				
  - [x] Consumer seek				
- - [ ] Multi-topics consumer					
- - [ ] Topics regex consumer					
+ - [ ] Multi-topics consumer (soon)					
+ - [ ] Topics regex consumer (soon)					
  - [ ] TCompacted topics						
  - [x] User defined properties producer/consumer						
  - [ ] Reader hasMessageAvailable						
- - [ ] Hostname verification						
+ - [ ] Hostname verification (soon)						
  - [ ] Multi Hosts Service Url support						
  - [x] Key_shared					
  - [ ] key based batcher						
  - [x] Negative Acknowledge							
  - [x] Delayed Delivery Messages						
- - [ ] Dead Letter Policy							
- - [ ] Interceptors							
+ - [x] Dead Letter Policy							
+ - [ ] Interceptors	(soon)						
