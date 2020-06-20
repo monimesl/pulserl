@@ -45,29 +45,34 @@ _Note: Pulserl uses `pulserl` and `Shared` as the default subscription name and 
 
 ## Feature Matrix
 
- - [x] Partitioned topics 
- - [x] Batching	
- - [ ] Compression
- - [x] TLS	
- - [ ] Authentication (soon)	
- - [ ] Reader API	
- - [x] Proxy Support				
- - [ ] Effectively-Once				
- - [ ] Schema				
- - [x] Consumer seek				
- - [ ] Multi-topics consumer (soon)					
- - [ ] Topics regex consumer (soon)					
- - [ ] TCompacted topics						
- - [x] User defined properties producer/consumer						
- - [ ] Reader hasMessageAvailable						
- - [ ] Hostname verification (soon)						
- - [ ] Multi Hosts Service Url support						
- - [x] Key_shared					
- - [ ] key based batcher						
- - [x] Negative Acknowledge							
- - [x] Delayed Delivery Messages						
- - [x] Dead Letter Policy							
- - [ ] Interceptors	(soon)		
+ - [x] [Basic Producer](http://pulsar.apache.org/docs/en/concepts-messaging/#producers)
+ - [x] [Basic Consumer](http://pulsar.apache.org/docs/en/concepts-messaging/#consumers)
+ - [x] [Partitioned topics](http://pulsar.apache.org/docs/en/concepts-messaging/#partitioned-topics)
+ - [x] [Batching](http://pulsar.apache.org/docs/en/concepts-messaging/#batching)
+ - [ ] [Compression](http://pulsar.apache.org/docs/en/concepts-messaging/#compression)
+ - [x] [TLS](https://pulsar.apache.org/docs/en/security-tls-transport/#tls-overview)
+ - [ ] [Authentication (token, tls)](https://pulsar.apache.org/docs/en/security-overview/)
+ - [ ] [Reader API](https://pulsar.apache.org/docs/en/concepts-clients/#reader-interface)
+ - [x] [Proxy Support (for Kubernetes)](http://pulsar.apache.org/docs/en/concepts-architecture-overview/#pulsar-proxy)
+ - [x] [Effectively-Once](https://pulsar.apache.org/docs/en/concepts-messaging/#deduplication-and-effectively-once-semantics)
+ - [ ] [Schema](https://pulsar.apache.org/docs/en/schema-get-started/)
+ - [x] Consumer seek
+ - [ ] [Multi-topics consumer](https://pulsar.apache.org/docs/en/concepts-messaging/#multi-topic-subscriptions)
+ - [ ] [Topics regex consumer](https://github.com/apache/pulsar/wiki/PIP-13:-Subscribe-to-topics-represented-by-regular-expressions)
+ - [ ] [Compacted topics](https://pulsar.apache.org/docs/en/concepts-topic-compaction/#compaction)
+ - [x] User defined properties producer/consumer
+ - [ ] Reader hasMessageAvailable
+ - [ ] [Hostname verification](https://pulsar.apache.org/docs/en/2.3.1/security-tls-transport/#hostname-verification)
+ - [ ] [Multi Hosts Service Url support](https://pulsar.apache.org/docs/en/admin-api-overview/#java-admin-client)
+ - [x] [Key_shared](https://pulsar.apache.org/docs/en/concepts-messaging/#key_shared)
+ - [ ] key based batcher (didn't find a documentation) ?
+ - [x] [Negative Acknowledge](https://pulsar.apache.org/docs/en/concepts-messaging/#negative-acknowledgement)
+ - [x] [Delayed Delivery Messages](https://pulsar.apache.org/docs/en/concepts-messaging/#delayed-message-delivery)
+ - [x] [Dead Letter Policy](https://pulsar.apache.org/docs/en/concepts-messaging/#dead-letter-topic)
+ - [ ] [Interceptors](https://github.com/apache/pulsar/wiki/PIP-23:-Message-Tracing-By-Interceptors)
  
- 
+ _Thank you [Sabudaye](https://github.com/skulup/pulserl/issues/2#issuecomment-616463542) for this information_
+
 ## Overview
+
+...

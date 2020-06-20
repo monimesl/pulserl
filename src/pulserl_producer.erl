@@ -541,7 +541,7 @@ maybe_inner_producer_exited(ExitedPid, Reason, State) ->
   case dict:find(ExitedPid, State#state.child_to_partition) of
     {ok, Partition} ->
       error_logger:warning_msg("Producer(~p) to '~s' exited abnormally due to reason."
-      " '~p'. Restarting...", [ExitedPid, topic_utils:new_partition_str(
+      " '~p'. Restarting...", [ExitedPid, topic_utils:partition_str(
         State#state.topic, Partition), Reason]),
       State2 = State#state{
         partition_to_child = dict:erase(Partition, State#state.partition_to_child),
@@ -550,11 +550,11 @@ maybe_inner_producer_exited(ExitedPid, Reason, State) ->
       case create_inner_producer(Partition, State2) of
         {_NewPid, #state{} = NewState} ->
           error_logger:info_msg("Producer to '~s' restarted.",
-            [topic_utils:new_partition_str(State#state.topic, Partition)]),
+            [topic_utils:partition_str(State#state.topic, Partition)]),
           NewState;
         {error, NewReason} = Error ->
           error_logger:error_msg("Producer to '~s' restart failed. Reason: ~p",
-            [topic_utils:new_partition_str(State#state.topic, Partition), NewReason]),
+            [topic_utils:partition_str(State#state.topic, Partition), NewReason]),
           Error
       end;
     error ->

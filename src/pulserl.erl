@@ -13,7 +13,7 @@
 -export([await/1, await/2]).
 -export([produce/2, produce/3, produce/4]).
 -export([sync_produce/2, sync_produce/3]).
--export([consume/1, consume/2, ack/1, ack_cumulative/1, negative_ack/1]).
+-export([consume/1, ack/1, ack_cumulative/1, nack/1]).
 -export([start_consumption_in_background/1]).
 
 %%--------------------------------------------------------------------
@@ -104,9 +104,11 @@ sync_produce(PidOrTopic, Key, Value, Timeout) ->
 
 consume(PidOrTopic) ->
   if is_pid(PidOrTopic) ->
-    case pulserl_consumer:receive_message(PidOrTopic) of
-      {ok, #message{} = Message} ->
-        #consumerMessage{consumer = PidOrTopic, message = Message};
+    I = pulserl_consumer:receive_message(PidOrTopic),
+    %%error_logger:info_msg("Polling Pid: ~p        ~p", [PidOrTopic, I]),
+    case I of
+      #message{} = Message ->
+        #consumedMessage{consumer = PidOrTopic, message = Message};
       Other ->
         Other
     end;
@@ -117,41 +119,14 @@ consume(PidOrTopic) ->
       end
   end.
 
-consume(PidOrTopic, Timeout) ->
-  consume_until(PidOrTopic, erlwater_time:milliseconds() + Timeout).
+ack(#consumedMessage{consumer = Pid, message = Message}) when is_pid(Pid) ->
+  pulserl_consumer:ack(Pid, Message).
 
-%% @Todo. Remove and implement polling inside the consumer
-consume_until(PidOrTopic, StoppingTime) ->
-  if is_pid(PidOrTopic) ->
-    case erlwater_time:milliseconds() < StoppingTime of
-      true ->
-        case pulserl_consumer:receive_message(PidOrTopic) of
-          {ok, #message{} = Message} ->
-            #consumerMessage{consumer = PidOrTopic, message = Message};
-          {ok, false} ->
-            timer:sleep(10), %@Todo Will be remove. Avoid CPU Burst
-            consume_until(PidOrTopic, StoppingTime);
-          Other ->
-            Other
-        end;
-      _ ->
-        {ok, false}
-    end;
-    true ->
-      case pulserl_instance_registry:singleton_consumer(PidOrTopic, []) of
-        {ok, Pid} -> consume_until(Pid, StoppingTime);
-        Else -> Else
-      end
-  end.
+ack_cumulative(#consumedMessage{consumer = Pid, message = Message}) when is_pid(Pid) ->
+  pulserl_consumer:ack(Pid, Message, true).
 
-ack(#consumerMessage{consumer = Pid, message = Message}) when is_pid(Pid) ->
-  pulserl_consumer:acknowledge(Pid, Message).
-
-ack_cumulative(#consumerMessage{consumer = Pid, message = Message}) when is_pid(Pid) ->
-  pulserl_consumer:acknowledge(Pid, Message, true).
-
-negative_ack(#consumerMessage{consumer = Pid, message = Message}) when is_pid(Pid) ->
-  pulserl_consumer:negative_acknowledge(Pid, Message).
+nack(#consumedMessage{consumer = Pid, message = Message}) when is_pid(Pid) ->
+  pulserl_consumer:nack(Pid, Message).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -178,13 +153,14 @@ start_consumption_in_background(TopicOrPid) ->
   spawn(fun() -> do_consume(TopicOrPid) end).
 
 do_consume(PidOrTopic) ->
-  case consume(PidOrTopic, 100) of
-    #consumerMessage{message = #message{value = Value}} = ConsumerMsg ->
-      _ = ack(ConsumerMsg),
+  case consume(PidOrTopic) of
+    #consumedMessage{message = #message{value = Value}} = ConsumedMsg ->
+      _ = ack(ConsumedMsg),
       error_logger:info_msg("Consumer Received: ~p", [Value]);
     {error, _} = Error ->
       error(Error);
-    _ ->
+    false ->
+      timer:sleep(10),
       ok
   end,
   do_consume(PidOrTopic).

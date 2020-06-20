@@ -44,9 +44,9 @@ new_message(Topic, MessageId, #'MessageMetadata'{} = Meta, Value, RedeliveryCoun
     id = MessageId,
     key = Meta#'MessageMetadata'.partition_key,
     value = Value,
-    topic = topic_utils:to_string(Topic),
-    properties = Meta#'MessageMetadata'.properties,
     metadata = #messageMeta{
+      topic = topic_utils:to_string(Topic),
+      properties = Meta#'MessageMetadata'.properties,
       event_time = Meta#'MessageMetadata'.event_time,
       redelivery_count = if is_integer(RedeliveryCount) -> RedeliveryCount; true -> 0 end}
   }.

@@ -40,17 +40,17 @@
 }).
 
 -record(messageMeta, {
+  topic :: binary(),
   event_time :: integer() | ?UNDEF,
-  redelivery_count :: integer() | ?UNDEF
+  redelivery_count = 0 :: integer(),
+  properties = [] :: list()
 }).
 
 -record(message, {
   id :: #messageId{},
+  metadata :: #messageMeta{},
   key :: binary() | ?UNDEF,
-  value :: binary(),
-  topic :: binary(),
-  properties = [] :: list(),
-  metadata :: #messageMeta{}
+  value :: binary()
 }).
 
 -record(prodMessage, {
@@ -61,7 +61,7 @@
   deliverAtTime :: integer() | ?UNDEF
 }).
 
--record(consumerMessage, {
+-record(consumedMessage, {
   consumer :: pid(),
   message :: #message{}
 }).

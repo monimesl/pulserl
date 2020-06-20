@@ -20,7 +20,7 @@
 -export([encode/1, decode/1, new_send/8, parse_metadata/1]).
 
 -export([has_messages_in_batch/1, read_size/1]).
--export([new_connect/0, new_lookup_topic/2, new_partitioned_topic_meta/1, new_ack/2, new_ack/3, new_redeliver_un_ack_messages/2, new_seek/2]).
+-export([new_connect/0, new_lookup_topic/2, new_partitioned_topic_meta/1, new_ack/2, new_ack/3, new_redeliver_unack_messages/2, new_seek/2]).
 
 -export([encode/3, wrap_to_base_command/1, get_request_id/1, set_request_id/2, to_4bytes/1, encode_to_2bytes/1]).
 
@@ -149,7 +149,7 @@ new_ack(ConsumerId, [#messageId{} | _] = MessageIds) ->
     } || #messageId{ledger_id = LedgerId, entry_id = EntryId} <- MessageIds]
   }.
 
-new_redeliver_un_ack_messages(ConsumerId, MessageIds) when is_list(MessageIds) ->
+new_redeliver_unack_messages(ConsumerId, MessageIds) when is_list(MessageIds) ->
   #'CommandRedeliverUnacknowledgedMessages'{
     consumer_id = ConsumerId,
     message_ids = [#'MessageIdData'{

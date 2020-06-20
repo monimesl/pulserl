@@ -11,7 +11,7 @@
 
 %% API
 -export([parse/1, to_string/1, partition_index/1, is_partitioned/1,
-  new_partition/2, new_partition_str/2, partition_of/2, is_persistent/1]).
+  new_partition/2, partition_str/2, partition_of/2, is_persistent/1]).
 
 
 parse(CompleteName) when is_list(CompleteName) ->
@@ -82,10 +82,10 @@ is_partitioned(TopicName) when is_binary(TopicName) ->
 
 new_partition(#topic{} = Parent, Index)
   when is_integer(Index) andalso Index >= 0 ->
-  Pt = parse(new_partition_str(Parent, Index)),
+  Pt = parse(partition_str(Parent, Index)),
   Pt#topic{parent = Parent}.
 
-new_partition_str(#topic{} = Topic, Index) ->
+partition_str(#topic{} = Topic, Index) ->
   iolist_to_binary([to_string(Topic), "-partition-", integer_to_list(Index)]).
 
 partition_index(#topic{local = LocalName}) ->
