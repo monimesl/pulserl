@@ -9,16 +9,19 @@ It requires version __2.0+__ of Apache Pulsar and __19.0+__ of Erlang
 
 The examples assume you have a running Pulsar broker at `localhost:6650`, a topic called `test-topic` (can be partitioned or not) and `rebar3` installed.
 
-Fetch, compile and start the erlang shell.
-
 _Note: Pulserl uses `pulserl` and `Shared` as the default subscription name and type.
  So, if that subscription (not the consumer) under the topic `test-topic` does not exists, we make sure in this example to create it first by creating
  the consumer before producing any message to the topic._
 
-```erlang
-  git clone https://github.com/skulup/pulserl.git
+Fetch, compile and start the erlang shell.
+```$xslt
+  git clone https://github.com/skulup/pulserl.git,
   cd pulserl
   rebar3 shell
+```
+
+In the Erlang shell
+```erlang
   rr(pulserl).  %% load the api records
   
   %% A demo function to log the value of consumed messages
