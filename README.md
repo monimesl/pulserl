@@ -15,7 +15,7 @@ _Note: Pulserl uses `pulserl` and `Shared` as the default subscription name and 
  So, if that subscription (not the consumer) under the topic `test-topic` does not exists, we make sure in this example to create it first by creating
  the consumer before producing any message to the topic._
 
-```
+```erlang
   git clone https://github.com/skulup/pulserl.git
   cd pulserl
   rebar3 shell
