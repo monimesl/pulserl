@@ -14,7 +14,7 @@ _Note: Pulserl uses `pulserl` and `Shared` as the default subscription name and 
  the consumer before producing any message to the topic._
 
 Fetch, compile and start the erlang shell.
-```$xslt
+```
   git clone https://github.com/skulup/pulserl.git,
   cd pulserl
   rebar3 shell

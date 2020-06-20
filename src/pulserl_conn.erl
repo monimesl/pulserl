@@ -179,12 +179,12 @@ handle_info({Msg, Sock, Data}, #state{socket = Sock, data_buffer = DataBuffer} =
   when Msg == tcp orelse Msg == ssl ->
   NewDataBuffer = iolist_to_binary([DataBuffer, Data]),
   NewState = State#state{data_buffer = NewDataBuffer},
-  {noreply, handle_broker_data(NewState)};
+  {noreply, parse_buffer_data(NewState)};
 
 handle_info({timeout, TimerRef, reconnect},
     #state{logical_address = LogicalAddress, reconnect_timer = TimerRef} = State) ->
   error_logger:info_msg("Reconnecting to ~s", [LogicalAddress]),
-  {noreply, reconnect_process(State)};
+  {noreply, do_reconnect(State)};
 
 handle_info({Msg, Sock}, #state{socket = Sock} = State)
   when Msg == tcp_closed orelse Msg == ssl_closed ->
@@ -192,13 +192,13 @@ handle_info({Msg, Sock}, #state{socket = Sock} = State)
 
 handle_info({'DOWN', MonitorRef, process, MonitoredPid, _}, State) ->
   NewState =
-    %% Remove the dead process from the waiters dicts
+    %% Remove the dead process from the waiters registry
   case dict:take(MonitorRef, State#state.waiter_monitor2Id) of
     {WaiterId, NewWaiter_monitor2Id} ->
       NewWaiters = dict:erase(WaiterId, State#state.waiters),
       State#state{waiters = NewWaiters, waiter_monitor2Id = NewWaiter_monitor2Id};
     _ ->
-      %% Oops! The dead process is a consumer/producer. Whatever it is, remove it.
+      %% Oops!! The dead process is a consumer/producer, remove it.
       RemovalFun = fun(_, Pid) -> MonitoredPid /= Pid end,
       Producers = dict:filter(RemovalFun, State#state.producers),
       Consumers = dict:filter(RemovalFun, State#state.consumers),
@@ -222,36 +222,19 @@ code_change(_OldVsn, State, _Extra) ->
 %%% Internal functions
 %%%===================================================================
 
-handle_broker_data(State) ->
-  case read_complete_frame(State) of
-    {false, NewState} ->
-      %% Frame is incomplete
-      NewState;
-    {FrameData, NewState} ->
-      NewState2 = handle_command(FrameData, NewState),
-      handle_broker_data(NewState2)
+parse_buffer_data(State) ->
+  #state{data_buffer = Buffer} = State,
+  case pulserl_io:read_frame(Buffer) of
+    false ->
+      State;
+    {Frame, NewBuffer} ->
+      State2 = State#state{data_buffer = NewBuffer},
+      {Command, HeaderAndPayload} = pulserl_io:decode_command(Frame),
+      State3 = handle_command(Command, HeaderAndPayload, State2),
+      parse_buffer_data(State3)
   end.
 
-
--define(FRAME_LENGTH_INDICATOR_BYTE_SIZE, 4).
-
-%% @Read https://pulsar.apache.org/docs/en/develop-binary-protocol/#framing
-read_complete_frame(#state{data_buffer = DataBuffer} = State) ->
-  if byte_size(DataBuffer) > ?FRAME_LENGTH_INDICATOR_BYTE_SIZE ->
-    {FrameLength, Rest} = commands:read_size(DataBuffer),
-    if byte_size(Rest) >= FrameLength ->
-      <<Frame:FrameLength/binary, NewDataBuffer/binary>> = Rest,
-      CompleteFrame = <<FrameLength:32/unsigned-integer, Frame/binary>>,
-      {CompleteFrame, State#state{data_buffer = NewDataBuffer}};
-      true ->
-        {false, State}
-    end;
-    true ->
-      {false, State}
-  end.
-
-handle_command(Data, State) ->
-  {Command, HeadersAndPayload} = commands:decode(Data),
+handle_command(Command, HeadersAndPayload, State) ->
   case Command of
     #'CommandPing'{} ->
       send_pong_to_broker(State);
@@ -276,7 +259,9 @@ handle_command(Data, State) ->
     #'CommandMessage'{} ->
       handle_message(Command, HeadersAndPayload, State);
     _ ->
-      error({handler_not_implemented, Command})
+      error_logger:error_msg("No handler is implemeted to handle the "
+      "command: ~p with header and payload [~p]", [Command, HeadersAndPayload]),
+      State
   end.
 
 
@@ -313,7 +298,6 @@ handle_send_error(#'CommandSendError'{
 handle_producer_success(#'CommandProducerSuccess'{
   request_id = RequestId} = Response, State) ->
   send_reply_to_request_waiter(RequestId, Response, State).
-
 
 handle_close_consumer(#'CommandCloseConsumer'{consumer_id = ConsumerId}, State) ->
   fetch_consumer_by_id(ConsumerId, State,
@@ -439,10 +423,10 @@ send_internal(RequestCommand, #state{request_id = RequestId} = State) ->
 
 
 do_send_internal({payload, Command, Metadata, Payload}, RequestId, State) ->
-  RequestData = commands:encode(Command, Metadata, Payload),
+  RequestData = pulserl_io:encode(Command, Metadata, Payload),
   do_send_internal2(RequestData, RequestId, State);
 do_send_internal(Command, RequestId, State) ->
-  RequestData = commands:encode(Command),
+  RequestData = pulserl_io:encode_command(Command),
   do_send_internal2(RequestData, RequestId, State).
 
 do_send_internal2(RequestData, RequestId, #state{socket = Sock, socket_module = SockMod} = State) ->
@@ -455,17 +439,16 @@ do_send_internal2(RequestData, RequestId, #state{socket = Sock, socket_module = 
           {reply, ok, State}
       end;
     {error, _Reason} = Error ->
-      NewState = broadcast_error_then_reconnect(Error, State),
-      {reply, Error, NewState}
+      {reply, Error, broadcast_error_then_reconnect(Error, State)}
   end.
 
 
-schedule_reconnect_process(State) ->
+schedule_reconnect(State) ->
   TimerRef = erlang:start_timer(?RECONNECT_INTERVAL, self(), reconnect),
   State#state{reconnect_timer = TimerRef}.
 
 
-reconnect_process(State) ->
+do_reconnect(State) ->
   case (case create_connection(State) of
           {ok, NewState} ->
             case perform_handshake(NewState) of
@@ -481,7 +464,7 @@ reconnect_process(State) ->
         end)
   of
     #state{} = State2 -> State2;
-    _ -> schedule_reconnect_process(State)
+    _ -> schedule_reconnect(State)
   end.
 
 create_connection(#state{logical_address = LogicalAddress, socket_module = SockMod} = State) ->
@@ -489,13 +472,12 @@ create_connection(#state{logical_address = LogicalAddress, socket_module = SockM
   connect_to_brokers(State, Addresses).
 
 
-connect_to_brokers(State, [{IpAddress, Port} | T]) ->
+connect_to_brokers(State, [{IpAddress, Port} | Rest]) ->
   Result = connect_to_broker(State, IpAddress, Port, 3),
-  case T of
+  case Rest of
     [] -> Result;
-    _ -> connect_to_brokers(State, T)
+    _ -> connect_to_brokers(State, Rest)
   end.
-
 
 connect_to_broker(#state{socket_module = SockMod} = State, IpAddress, Port, Attempts) ->
   TcpOptions = [
@@ -512,7 +494,7 @@ connect_to_broker(#state{socket_module = SockMod} = State, IpAddress, Port, Atte
       case Attempts of
         0 -> {error, Reason};
         _ ->
-          timer:sleep(200),
+          timer:sleep(300),
           connect_to_broker(State, IpAddress, Port, Attempts - 1)
       end
   end.
@@ -526,7 +508,7 @@ perform_handshake(#state{socket = Socket, socket_module = SockMod} = State) ->
     {_, _, NewState} ->
       case SockMod:recv(Socket, 0) of
         {ok, Data} ->
-          {Command, _} = commands:decode(Data),
+          {Command, _} = pulserl_io:decode_command(Data),
           case Command of
             #'CommandConnected'{
               server_version = ServerVsn,
@@ -563,13 +545,12 @@ optimize_socket(State, Sock) ->
 
 broadcast_error_then_reconnect(Error, State) ->
   NewState = broadcast_error(Error, State),
-  schedule_reconnect_process(NewState).
+  schedule_reconnect(NewState).
 
 broadcast_error(Error, State) ->
   NewState = notify_client_of_down(Error, State),
   %% Then notify all pending waiters of the error
   send_reply_to_all_request_waiters(Error, NewState).
-
 
 notify_client_of_up(#state{socket_address = SockAddr, socket = Socket} = State) ->
   erlang:send(pulserl_client, {connection_up, SockAddr, Socket, self()}),

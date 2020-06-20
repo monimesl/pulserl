@@ -135,11 +135,15 @@ send_message_to_dead_letter(Pid, Message) ->
 -record(state, {
   state,
   connection :: pid(),
-  subscription :: string(),
-  subscription_type :: atom(),
   consumer_id :: integer(),
+  %% start of consumer stuff
   consumer_name :: string(),
-  initial_position :: atom(),
+  consumer_properties :: list(),
+  consumer_initial_position :: atom(),
+  consumer_priority_level :: atom(),
+  consumer_subscription_type :: atom(),
+  consumer_subscription_name :: string(),
+  %% end of consumer stuff
   partition_count = 0 :: non_neg_integer(),
   partition_to_child = #{},
   child_to_partition = #{},
@@ -152,7 +156,7 @@ send_message_to_dead_letter(Pid, Message) ->
   flow_permits = 0,
   queue_size = 1000,
   queue_refill_threshold = 1000,
-  message_queue = queue:new() :: queue:queue(),
+  incoming_messages = queue:new() :: queue:queue(),
   %% Dead Letter Policy
   dead_letter_topic_producer :: pid(),
   dead_letter_topic_messages = ?UNDEF :: #{},
@@ -160,7 +164,7 @@ send_message_to_dead_letter(Pid, Message) ->
   dead_letter_topic_name :: string(),
   retry_letter_topic_name :: string(),
 
-  consumer_poll_sequence = 0,
+  children_poll_sequence = 0,
   %%% For acknowledgements
   batch_ack_trackers = #{} :: #{},
   un_ack_message_ids = #{} :: #{}, %% messageId => ack_timeout_time
@@ -173,10 +177,10 @@ send_message_to_dead_letter(Pid, Message) ->
   nack_message_redelivery_timer :: reference(),
   nack_message_redelivery_timer_tick :: non_neg_integer(),
 
-  acknowledgments_send_timer :: reference(),
-  acknowledgments_send_timer_tick :: non_neg_integer(), %% [100, ...) 0 to disable (ack immediately)
-  max_pending_acknowledgments = 1000 :: non_neg_integer(),
-  pending_acknowledgments = gb_sets:new() %%% Note :: The ids need to be sorted.
+  acknowledgments_send_timer = ?UNDEF :: reference(),
+  acknowledgments_send_timer_tick :: non_neg_integer(), %% [0, ...) 0 to disable delayed ack (ack immediately)
+  max_pending_acknowledgments = 1000 :: non_neg_integer(), %% [0, ...) 0 to disable delayed ack (ack immediately)
+  pending_acknowledgments = sets:new()
 }).
 
 
@@ -186,10 +190,11 @@ send_message_to_dead_letter(Pid, Message) ->
 
 init([#topic{} = Topic, Opts]) ->
   process_flag(trap_exit, true),
+  ConsumerOpts = proplists:get_value(consumer, Opts, []),
   ParentConsumer = proplists:get_value(parent_consumer, Opts),
   QueueSize = erlang:max(proplists:get_value(queue_size, Opts, 1000), 1),
-  SubscriptionName = proplists:get_value(subscription_name, Opts, "pulserl"),
-  SubscriptionType = proplists:get_value(subscription_type, Opts, ?SHARED_SUBSCRIPTION),
+  SubscriptionName = proplists:get_value(subscription_name, ConsumerOpts, "pulserl"),
+  SubscriptionType = proplists:get_value(subscription_type, ConsumerOpts, ?SHARED_SUBSCRIPTION),
   NegAckDelay = erlang:max(proplists:get_value(nack_message_redelivery_delay, Opts, 100), 60000),
   DeadLetterMaxRedeliveryCount = erlang:max(proplists:get_value(dead_letter_topic_max_redeliver_count, Opts, 0), 0),
   State = #state{
@@ -197,14 +202,16 @@ init([#topic{} = Topic, Opts]) ->
     options = Opts,
     queue_size = QueueSize,
     parent_consumer = ParentConsumer,
-    subscription = SubscriptionName,
-    subscription_type = SubscriptionType,
-    consumer_name = proplists:get_value(consumer_name, Opts),
-    initial_position = proplists:get_value(initial_position, Opts, ?POS_LATEST),
+    consumer_subscription_name = SubscriptionName,
+    consumer_subscription_type = SubscriptionType,
+    consumer_name = proplists:get_value(name, ConsumerOpts),
+    consumer_properties = proplists:get_value(properties, ConsumerOpts, []),
+    consumer_priority_level = proplists:get_value(priority_level, ConsumerOpts, 0),
+    consumer_initial_position = proplists:get_value(initial_position, ConsumerOpts, ?POS_LATEST),
     acknowledgments_send_timer_tick = proplists:get_value(acknowledgments_send_tick, Opts, 100),
     max_pending_acknowledgments = proplists:get_value(max_pending_acknowledgments, Opts, 1000),
     queue_refill_threshold = erlang:max(proplists:get_value(queue_refill_threshold, Opts, QueueSize div 2), 1),
-    %% Ack
+    %% Acknowledgment
     acknowledgment_timeout = proplists:get_value(acknowledgment_timeout, Opts, 0),
     %% Negative Ack
     nack_message_redelivery_delay = NegAckDelay,
@@ -237,7 +244,7 @@ handle_call(_, _From, #state{state = ?UNDEF} = State) ->
   %% I'm not ready yet
   {reply, ?ERROR_CONSUMER_NOT_READY, State};
 
-handle_call({acknowledge, _, true}, _From, #state{subscription_type = ?SHARED_SUBSCRIPTION} = State) ->
+handle_call({acknowledge, _, true}, _From, #state{consumer_subscription_type = ?SHARED_SUBSCRIPTION} = State) ->
   {reply, ?ERROR_CONSUMER_CUMULATIVE_ACK_INVALID, State};
 
 %% The parent
@@ -331,12 +338,12 @@ handle_call(redeliver_unack_messages, _From, #state{parent_consumer = Parent} = 
           {error, _} = Error ->
             {Error, State};
           _ ->
-            MessageQueueLen = queue:len(State#state.message_queue),
+            MessageQueueLen = queue:len(State#state.incoming_messages),
             State2 = State#state{
               batch_ack_trackers = #{},
               un_ack_message_ids = #{},
-              message_queue = queue:new(),
-              pending_acknowledgments = gb_sets:new()},
+              incoming_messages = queue:new(),
+              pending_acknowledgments = sets:new()},
             {ok, increase_flow_permits(State2, MessageQueueLen)}
         end
     end,
@@ -358,13 +365,13 @@ handle_cast({close, AttemptRestart}, #state{partition_count = PartitionCount} = 
         close_children(State);
         true ->
           error_logger:info_msg("Restarting consumer(~p) with subscription [~p]",
-            [self(), State#state.subscription]),
+            [self(), State#state.consumer_subscription_name]),
           reinitialize(State)
       end,
     {noreply, NewState};
     true ->
       error_logger:info_msg("Consumer(~p) with subscription [~p] is permanelty closing",
-        [self(), State#state.subscription]),
+        [self(), State#state.consumer_subscription_name]),
       State2 = cancel_all_timers(State),
       {close, normal, close_children(State2)}
   end;
@@ -377,7 +384,7 @@ handle_cast(Request, State) ->
 handle_info({new_message, MsgId, RedeliveryCount, HeadersAndPayload},
     #state{topic = Topic} = State) ->
   MessageId = pulserl_utils:new_message_id(Topic, MsgId),
-  case commands:parse_metadata(HeadersAndPayload) of
+  case pulserl_io:decode_metadata(HeadersAndPayload) of
     {error, _} = Error ->
       {noreply, handle_message_error(MessageId, Error, State)};
     {Metadata, Payload} ->
@@ -484,6 +491,8 @@ start_nack_redelivery_timer(#state{
   nack_message_redelivery_timer_tick = Time} = State) ->
   State#state{nack_message_redelivery_timer = self_send_after(?REDELIVER_NACK_MESSAGES, Time)}.
 
+start_acknowledgments_send_timer(#state{max_pending_acknowledgments = 0} = State) ->
+  State;
 start_acknowledgments_send_timer(#state{acknowledgments_send_timer_tick = 0} = State) ->
   State;
 start_acknowledgments_send_timer(#state{acknowledgments_send_timer_tick = Time} = State) ->
@@ -556,7 +565,7 @@ redeliver_messages([], State) ->
 redeliver_messages(MessageIds,
     #state{connection = Cnx, consumer_id = ConsumerId} = State) ->
   Command =
-    case State#state.subscription_type of
+    case State#state.consumer_subscription_type of
       ?SHARED_SUBSCRIPTION ->
         commands:new_redeliver_unack_messages(ConsumerId, MessageIds);
       ?KEY_SHARED_SUBSCRIPTION ->
@@ -622,22 +631,17 @@ send_acknowledgment(MsgId, true, State) ->
   %% Don't delay cumulative ack. Send it now
   do_send_ack_now(MsgId, true, State);
 send_acknowledgment(MsgId, Cumulative,
-    #state{acknowledgments_send_timer_tick = 0} = State) ->
-  %% No ack timer set. Send it now
+    #state{acknowledgment_timeout_timer = ?UNDEF} = State) ->
+  %% Delayed ack is disabled. Send it now
   do_send_ack_now(MsgId, Cumulative, State);
-send_acknowledgment(MsgId, Cumulative,
-    #state{max_pending_acknowledgments = 0} = State) ->
-  %% No max pending ack count was set. Send it now
-  do_send_ack_now(MsgId, Cumulative, State);
-
 %% Ack timer/max pending is set
 send_acknowledgment(MsgId, _Cumulative,
     #state{
       pending_acknowledgments = PendingAcknowledgments,
       max_pending_acknowledgments = MaxPendingAcknowledgments} = State) ->
-  PendingAcknowledgments2 = gb_sets:add(MsgId, PendingAcknowledgments),
+  PendingAcknowledgments2 = sets:add_element(MsgId, PendingAcknowledgments),
   NewState = State#state{pending_acknowledgments = PendingAcknowledgments2},
-  case gb_sets:size(PendingAcknowledgments2) >= MaxPendingAcknowledgments of
+  case sets:size(PendingAcknowledgments2) >= MaxPendingAcknowledgments of
     true ->
       do_send_pending_acknowledgements(NewState);
     _ ->
@@ -659,14 +663,14 @@ do_send_pending_acknowledgements(
     #state{
       consumer_id = ConsumerId,
       pending_acknowledgments = PendingAcknowledgments} = State) ->
-  case gb_sets:is_empty(PendingAcknowledgments) of
+  case sets:is_empty(PendingAcknowledgments) of
     true ->
       State;
     _ ->
-      MessageIds = gb_sets:to_list(PendingAcknowledgments),
+      MessageIds = sets:to_list(PendingAcknowledgments),
       AckSendCommand = commands:new_ack(ConsumerId, MessageIds),
       NewState = send_actual_command(AckSendCommand, MessageIds, State),
-      NewState#state{pending_acknowledgments = gb_sets:new()}
+      NewState#state{pending_acknowledgments = sets:new()}
   end.
 
 send_actual_command(#'CommandAck'{} = Command, MessageIds,
@@ -687,10 +691,10 @@ on_message_ack_fail(_Error, #messageId{}, State) ->
 message_id_2_batch_ack_tracker_key(#messageId{ledger_id = LedgerId, entry_id = EntryId}) ->
   {LedgerId, EntryId}.
 
-handle_receive_message(#state{message_queue = MessageQueue} = State) ->
+handle_receive_message(#state{incoming_messages = MessageQueue} = State) ->
   case queue:out(MessageQueue) of
     {{value, Message}, MessageQueue2} ->
-      State2 = increase_flow_permits(State#state{message_queue = MessageQueue2}, 1),
+      State2 = increase_flow_permits(State#state{incoming_messages = MessageQueue2}, 1),
       {Message, track_message(Message#message.id, State2)};
     {empty, _} ->
       {false, State}
@@ -702,8 +706,8 @@ handle_messages(MetadataAndMessages, State) ->
       MsgQueue1 = add_to_received_message_queue(MetadataAndMessage, MsgQueue, State),
       DeadLetterMsgMap1 = add_to_dead_letter_message_map(MetadataAndMessage, DeadLetterMsgMap, State),
       {MsgQueue1, DeadLetterMsgMap1}
-    end, {State#state.message_queue, State#state.dead_letter_topic_messages}, MetadataAndMessages),
-  State#state{message_queue = NewMessageQueue, dead_letter_topic_messages = DeadLetterMsgMap}.
+    end, {State#state.incoming_messages, State#state.dead_letter_topic_messages}, MetadataAndMessages),
+  State#state{incoming_messages = NewMessageQueue, dead_letter_topic_messages = DeadLetterMsgMap}.
 
 
 %% @Todo Remove `compacted_out` messages
@@ -731,7 +735,7 @@ add_to_dead_letter_message_map({_, #'message'{id = MsgId, metadata = #'messageMe
 
 send_messages_to_dead_letter_topic(#state{dead_letter_topic_messages = ?UNDEF} = State) ->
   State;
-send_messages_to_dead_letter_topic(#state{subscription_type = SubType} = State)
+send_messages_to_dead_letter_topic(#state{consumer_subscription_type = SubType} = State)
   when SubType /= ?SHARED_SUBSCRIPTION ->
   State;
 send_messages_to_dead_letter_topic(State) ->
@@ -796,7 +800,7 @@ do_send_to_dead_letter_topic1(Message, State) ->
       (Message#message.metadata)#messageMeta.redelivery_count,
       MsgId#messageId.topic,
       DeadLetterTopic, topic_utils:to_string(State#state.topic),
-      State#state.subscription, self()]),
+      State#state.consumer_subscription_name, self()]),
   ProdMessage = pulserl_producer:new_message(Key, Value, Props),
   case pulserl_producer:sync_produce(ProducerPid, ProdMessage) of
     {error, Reason} = Result ->
@@ -855,8 +859,8 @@ payload_to_messages(_Metadata, <<>>, Acc) ->
   lists:reverse(Acc);
 
 payload_to_messages(Metadata, Data, Acc) ->
-  {SingleMetadataSize, Data2} = commands:read_size(Data),
-  <<SingleMetadataBytes:SingleMetadataSize/binary, RestOfData/binary>> = Data2,
+  {SingleMetadataSize, Rest} = pulserl_io:read_4bytes(Data),
+  <<SingleMetadataBytes:SingleMetadataSize/binary, RestOfData/binary>> = Rest,
   SingleMetadata = pulsar_api:decode_msg(SingleMetadataBytes, 'SingleMessageMetadata'),
   {PayloadData, RestOfData2} = read_payload_data(SingleMetadata, RestOfData),
   payload_to_messages(Metadata, RestOfData2, [{SingleMetadata, PayloadData} | Acc]).
@@ -955,13 +959,20 @@ initialize_self(#state{topic = Topic} = State) ->
 
 
 subscribe_to_topic(State) ->
+  SubType = State#state.consumer_subscription_type,
   Subscribe = #'CommandSubscribe'{
     consumer_id = State#state.consumer_id,
-    subscription = State#state.subscription,
+    subType = to_pulsar_subType(SubType),
     consumer_name = State#state.consumer_name,
     topic = topic_utils:to_string(State#state.topic),
-    subType = to_pulsar_subType(State#state.subscription_type),
-    initialPosition = to_pulsar_initial_pos(State#state.initial_position)
+    subscription = State#state.consumer_subscription_name,
+    metadata = commands:to_con_prod_metadata(State#state.consumer_properties),
+    initialPosition = to_pulsar_initial_pos(State#state.consumer_initial_position),
+    priority_level = (case SubType of
+                        ?SHARED_SUBSCRIPTION -> State#state.consumer_priority_level;
+                        ?FAILOVER_SUBSCRIPTION -> State#state.consumer_priority_level;
+                        _ -> ?UNDEF
+                      end)
   },
   case pulserl_conn:send_simple_command(
     State#state.connection, Subscribe
@@ -970,7 +981,7 @@ subscribe_to_topic(State) ->
       Err;
     #'CommandSuccess'{} ->
       error_logger:info_msg("Consumer=~p with subscription=~s subscribed to topic=~s",
-        [self(), State#state.subscription, topic_utils:to_string(State#state.topic)]),
+        [self(), State#state.consumer_subscription_name, topic_utils:to_string(State#state.topic)]),
       State
   end.
 
@@ -986,7 +997,7 @@ increase_flow_permits(State, Increment) ->
       {error, _} = Error ->
         error_logger:error_msg("Error: ~p on sending flow permits:"
         " [~p]) in consumer: [~p] as: ~s",
-          [Error, NewPermits, self(), State#state.subscription]),
+          [Error, NewPermits, self(), State#state.consumer_subscription_name]),
         State;
       _ ->
         %% Reset the permits
@@ -1107,6 +1118,17 @@ validate_options(Options) when is_list(Options) ->
   lists:foreach(
     fun({parent_consumer, _} = Opt) ->
       Opt;
+      ({consumer, Options2} = Opt) ->
+        validate_options(Options2),
+        Opt;
+      ({consumer_name, _} = Opt) ->
+        erlwater_assertions:is_string(Opt);
+      ({subscription_name, _V} = Opt) ->
+        erlwater_assertions:is_string(Opt);
+      ({priority_level, _V} = Opt) ->
+        erlwater_assertions:is_non_negative_int(Opt);
+      ({properties, _V} = Opt) ->
+        erlwater_assertions:is_proplist(Opt);
       ({initial_position, V} = _Opt) ->
         case V of
           ?POS_LATEST ->
@@ -1131,10 +1153,6 @@ validate_options(Options) when is_list(Options) ->
         end;
       ({queue_size, _} = Opt) ->
         erlwater_assertions:is_positive_int(Opt);
-      ({consumer_name, _} = Opt) ->
-        erlwater_assertions:is_string(Opt);
-      ({subscription_name, _V} = Opt) ->
-        erlwater_assertions:is_string(Opt);
       ({acknowledgments_send_tick, _} = Opt) ->
         erlwater_assertions:is_positive_int(Opt);
       ({max_pending_acknowledgments, _} = Opt) ->
@@ -1166,7 +1184,7 @@ choose_partition_consumer(Partition, State) ->
 
 partition_consumers_to_poll(undefined,
     #state{partition_count = PartitionCount,
-      consumer_poll_sequence = Sequence} = State) ->
+      children_poll_sequence = Sequence} = State) ->
   HeadPartition = Sequence rem State#state.partition_count,
   TailPartitions = lists:foldl(
     fun(I, Acc) when I /= HeadPartition ->
@@ -1183,7 +1201,7 @@ partition_consumers_to_poll(undefined,
           [Pid | Acc]
       end
     end, [], [HeadPartition | TailPartitions]),
-  {Pids, State#state{consumer_poll_sequence = Sequence + 1}}.
+  {Pids, State#state{children_poll_sequence = Sequence + 1}}.
 
 
 generate_consumer_id(#state{consumer_id = ?UNDEF}, Pid) ->

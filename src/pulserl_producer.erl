@@ -179,10 +179,16 @@ start_link(#topic{} = Topic, Options) ->
   state,
   connection :: pid(),
   producer_id :: integer(),
+  %% start of producer options
+  producer_name :: string(),
+  producer_properties = [] :: list(),
+  producer_initial_sequence_id :: integer(),
+  %% end of producer options
+  topic :: #topic{},
   partition_count = 0 :: non_neg_integer(),
   partition_to_child = dict:new(),
   child_to_partition = dict:new(),
-  batch_requests = queue:new(),
+  request_queue = queue:new(),
   pending_requests = dict:new(),
   batch_send_timer,
   sequence_id :: integer(),
@@ -190,37 +196,34 @@ start_link(#topic{} = Topic, Options) ->
   %%Config
   options :: list(),
   batch_enable :: boolean(),
-  batch_max_messages :: integer(),
+  max_batched_messages :: integer(),
   batch_max_delay_ms :: integer(),
   max_pending_messages :: integer(),
   max_pending_messages_across_partitions :: integer(),
-  block_on_full_queue :: boolean(),
-  initial_sequence_id :: integer(),
-  producer_name :: string(),
-  properties = [] :: list(),
-  topic :: #topic{}
+  block_on_full_queue :: boolean()
 }).
 
 
 init([#topic{} = Topic, Opts]) ->
   process_flag(trap_exit, true),
+  ProducerOpts = proplists:get_value(producer, Opts, []),
   State = #state{
     topic = Topic,
     options = Opts,
+    producer_name = proplists:get_value(name, ProducerOpts),
+    producer_properties = proplists:get_value(properties, ProducerOpts, []),
+    producer_initial_sequence_id = proplists:get_value(initial_sequence_id, ProducerOpts, 0),
     batch_enable = proplists:get_value(batch_enable, Opts, true),
     batch_max_delay_ms = proplists:get_value(batch_max_delay_ms, Opts, 10),
-    batch_max_messages = proplists:get_value(batch_max_messages, Opts, 1000),
+    max_batched_messages = proplists:get_value(batch_max_messages, Opts, 1000),
     max_pending_messages = proplists:get_value(max_pending_messages, Opts, 1000),
     block_on_full_queue = proplists:get_value(block_on_full_queue, Opts, true),
-    initial_sequence_id = proplists:get_value(initial_sequence_id, Opts),
-    producer_name = proplists:get_value(producer_name, Opts),
-    properties = proplists:get_value(properties, Opts, []),
     max_pending_messages_across_partitions = proplists:get_value(
       max_pending_messages_across_partitions, Opts, 50000)
   },
-  {InitSeqId, SeqId} = case State#state.initial_sequence_id of ?UNDEF -> {0, 0}; I ->
+  {InitSeqId, SeqId} = case State#state.producer_initial_sequence_id of 0 -> {0, 0}; I ->
     {I, I + 1} end,
-  case initialize(State#state{initial_sequence_id = InitSeqId, sequence_id = SeqId}) of
+  case initialize(State#state{producer_initial_sequence_id = InitSeqId, sequence_id = SeqId}) of
     {error, Reason} ->
       {stop, Reason};
     NewState ->
@@ -260,7 +263,7 @@ handle_cast({close, AttemptRestart}, State) ->
         [topic_utils:to_string(State#state.topic)]),
       State2 = close_children(State, AttemptRestart),
       State3 = send_reply_to_all_waiters(?ERROR_PRODUCER_CLOSED, State2),
-      {noreply, try_reinitialize(State3#state{state = ?UNDEF})};
+      {noreply, reinitialize(State3#state{state = ?UNDEF})};
     _ ->
       error_logger:info_msg("Producer(~p) at: ~p is permanelty closing",
         [self(), topic_utils:to_string(State#state.topic)]),
@@ -281,13 +284,13 @@ handle_info({send_error, SequenceId, {error, _} = Error}, State) ->
 
 handle_info({timeout, _TimerRef, send_batch},
     #state{batch_enable = true,
-      batch_max_messages = BatchMaxMessages,
-      batch_requests = BatchRequests} = State) ->
-  BatchRequestsLen = queue:len(BatchRequests),
+      max_batched_messages = BatchMaxMessages,
+      request_queue = RequestQueue} = State) ->
+  BatchRequestsLen = queue:len(RequestQueue),
   if BatchRequestsLen > 0 ->
-    Size = erlang:min(BatchMaxMessages, queue:len(BatchRequests)),
-    {NextBatch, NewBatchRequests} = next_request_batch(State, Size),
-    State2 = State#state{batch_requests = NewBatchRequests},
+    Size = erlang:min(BatchMaxMessages, queue:len(RequestQueue)),
+    {NextBatch, NewRequestQueue} = next_requests_batch(State, Size),
+    State2 = State#state{request_queue = NewRequestQueue},
     {noreply, send_batch_messages(NextBatch, start_batch_timer(State2))};
     true ->
       {noreply, start_batch_timer(State)}
@@ -307,11 +310,11 @@ handle_info(connection_down, State) ->
 
 %% Try re-initialization again
 handle_info(connection_up, State) ->
-  {noreply, try_reinitialize(State)};
+  {noreply, reinitialize(State)};
 
 %% Last reinitialization failed. Still trying..
 handle_info(try_reinitialize, State) ->
-  {noreply, try_reinitialize(State)};
+  {noreply, reinitialize(State)};
 
 
 handle_info({'DOWN', _ConnMonitorRef, process, _Pid, _},
@@ -350,9 +353,9 @@ code_change(_OldVsn, State, _Extra) ->
 send_reply_to_producer_waiter(SequenceId, Reply,
     #state{pending_requests = PendingRequests} = State) ->
   case dict:take(SequenceId, PendingRequests) of
-    {SucceededPendingRequests, PendingRequests2} ->
+    {SucceededPendingRequests, NewPendingRequests} ->
       State2 = send_replies_to_waiters(Reply, SucceededPendingRequests, State),
-      State2#state{pending_requests = PendingRequests2};
+      State2#state{pending_requests = NewPendingRequests};
     _ ->
       error_logger:warning_msg("Couldn't see the waiter in the waiting list of "
       "producer: ~p during reply with sequence id: ~p", [self(), SequenceId]),
@@ -369,20 +372,20 @@ choose_partition_producer(Key, State) ->
 may_be_produce_message(Message, From, State) ->
   Request = {From, Message},
   if State#state.batch_enable andalso Message#prodMessage.deliverAtTime == ?UNDEF ->
-    case add_to_pending_or_blocking(Request, State) of
-      {notfull, NewBatchRequests} ->
+    case add_to_request_to_batch(Request, State) of
+      {notfull, NewRequestQueue} ->
         %% Was added but still the `pending_requests` has some space.
         %% Tell the client to chill whilst; we'll send the response
         %% when either the `batch_max_delay_ms` timeouts or
         %% `pending_requests` is reached.
-        {ok, may_be_trigger_batch(State#state{batch_requests = NewBatchRequests})};
-      {full, NewBatchRequests} ->
+        {ok, may_be_trigger_batch(State#state{request_queue = NewRequestQueue})};
+      {full, NewRequestQueue} ->
         %% The new request just fills the `pending_requests` queue.
         %% Send `ok` to the client and trigger a batch send if none is in progress
-        {ok, may_be_trigger_batch(State#state{batch_requests = NewBatchRequests})};
-      {fulled, NewBatchRequests} ->
+        {ok, may_be_trigger_batch(State#state{request_queue = NewRequestQueue})};
+      {fulled, NewRequestQueue} ->
         %% The `pending_requests` is already fulled,
-        {ok, may_be_trigger_batch(State#state{batch_requests = NewBatchRequests})}
+        {ok, may_be_trigger_batch(State#state{request_queue = NewRequestQueue})}
     end;
     true ->
       %% No batching. Send directly
@@ -391,27 +394,27 @@ may_be_produce_message(Message, From, State) ->
 
 
 may_be_trigger_batch(#state{
-  batch_max_messages = MaxBatchMessages} = State) ->
-  case next_request_batch(State, MaxBatchMessages) of
+  max_batched_messages = MaxBatchMessages} = State) ->
+  case next_requests_batch(State, MaxBatchMessages) of
     {[], _} -> State;
-    {NextBatch, NewBatchReqs} ->
+    {NextBatch, NewRequestQueue} ->
       NewState = State#state{
-        batch_requests = NewBatchReqs},
+        request_queue = NewRequestQueue},
       send_batch_messages(NextBatch, NewState)
   end.
 
 
-next_request_batch(#state{batch_requests = BatchRequests}, 0) ->
-  {[], BatchRequests};
-next_request_batch(#state{batch_requests = BatchRequests} = State, Size) ->
-  case queue:len(BatchRequests) >= Size of
+next_requests_batch(#state{request_queue = RequestQueue}, 0) ->
+  {[], RequestQueue};
+next_requests_batch(#state{request_queue = RequestQueue} = State, Size) ->
+  case queue:len(RequestQueue) >= Size of
     true ->
-      {BatchableReqQueue, RemainingQueue} = queue:split(Size, BatchRequests),
-      update_pending_messages_count_across_partitions(
-        State, - queue:len(BatchableReqQueue)),
-      {queue:to_list(BatchableReqQueue), RemainingQueue};
+      {NextBatchQueue, RemainingQueue} = queue:split(Size, RequestQueue),
+      update_pending_count_across_partitions(
+        State, - queue:len(NextBatchQueue)),
+      {queue:to_list(NextBatchQueue), RemainingQueue};
     _ ->
-      {[], BatchRequests}
+      {[], RequestQueue}
   end.
 
 send_message({_, #prodMessage{value = Payload} = Msg} = Request,
@@ -449,7 +452,7 @@ send_batch_messages(Batch, #state{
       SerializedSingleMsgMeta = pulsar_api:encode_msg(SingleMsgMeta),
       SerializedSingleMsgMetaSize = byte_size(SerializedSingleMsgMeta),
       BatchBuffer1 = erlang:iolist_to_binary([BatchBuffer0,
-        commands:to_4bytes(SerializedSingleMsgMetaSize),
+        pulserl_io:to_4bytes(SerializedSingleMsgMetaSize),
         SerializedSingleMsgMeta, Payload
       ]),
       {SeqId + 1, BatchBuffer1}
@@ -466,7 +469,7 @@ send_batch_messages(Batch, #state{
 
 
 send_reply_to_all_waiters(Reply, State) ->
-  BatchReqs = queue:to_list(State#state.batch_requests),
+  BatchReqs = queue:to_list(State#state.request_queue),
   PendingReqs = [From || {_, From} <- dict:to_list(State#state.pending_requests)],
   send_replies_to_waiters(Reply, PendingReqs ++ BatchReqs, State).
 
@@ -490,19 +493,19 @@ send_replies_to_waiters(Reply, Requests, State) ->
   State.
 
 
-add_to_pending_or_blocking(Request, #state{
-  batch_requests = BatchRequests,
+add_to_request_to_batch(Request, #state{
+  request_queue = RequestQueue,
   max_pending_messages = MaxPendingMessages,
   max_pending_messages_across_partitions = MaxPendingPartitionedMessages
 } = State) ->
-  BatchRequestsLen = queue:len(BatchRequests),
-  case (BatchRequestsLen < MaxPendingMessages)
+  RequestQueueLen = queue:len(RequestQueue),
+  case (RequestQueueLen < MaxPendingMessages)
     andalso (MaxPendingPartitionedMessages >
-      %% Increment by zero to read
-    update_pending_messages_count_across_partitions(State, 0)) of
+      %% Increment by zero to read current count
+    update_pending_count_across_partitions(State, 0)) of
     true ->
       %% Add to the `pending_requests` queue
-      {CrossPartitionsPendingLen2, BatchRequestsLen2, NewBatchRequests} = enqueue_request(Request, State),
+      {CrossPartitionsPendingLen2, BatchRequestsLen2, NewBatchRequests} = add_to_request_to_batch2(Request, State),
       %% Check again if it's still not full
       if (BatchRequestsLen2 < MaxPendingMessages) andalso (MaxPendingPartitionedMessages > CrossPartitionsPendingLen2) ->
         {notfull, NewBatchRequests};
@@ -510,18 +513,18 @@ add_to_pending_or_blocking(Request, #state{
           {full, NewBatchRequests}
       end;
     _ ->
-      {_, _, NewBatchRequests} = enqueue_request(Request, State),
+      {_, _, NewBatchRequests} = add_to_request_to_batch2(Request, State),
       {fulled, NewBatchRequests}
   end.
 
 
-enqueue_request(Request, #state{batch_requests = BatchRequests} = State) ->
-  NewBatchRequests = queue:in(Request, BatchRequests),
-  {update_pending_messages_count_across_partitions(State, 1),
-    queue:len(NewBatchRequests), NewBatchRequests}.
+add_to_request_to_batch2(Request, #state{request_queue = RequestQueue} = State) ->
+  NewRequestQueue = queue:in(Request, RequestQueue),
+  {update_pending_count_across_partitions(State, 1),
+    queue:len(NewRequestQueue), NewRequestQueue}.
 
 
-update_pending_messages_count_across_partitions(
+update_pending_count_across_partitions(
     #state{topic = Topic}, Increment) ->
   if Topic#topic.parent /= ?UNDEF ->
     %% this is a producer to one of the partition
@@ -563,7 +566,7 @@ maybe_inner_producer_exited(ExitedPid, Reason, State) ->
   end.
 
 
-try_reinitialize(State) ->
+reinitialize(State) ->
   Topic = topic_utils:to_string(State#state.topic),
   case initialize(State) of
     {error, Reason} ->
@@ -637,7 +640,9 @@ establish_producer(#state{topic = Topic} = State) ->
   Command = #'CommandProducer'{
     topic = topic_utils:to_string(Topic),
     producer_id = State#state.producer_id,
-    producer_name = State#state.producer_name},
+    producer_name = State#state.producer_name,
+    metadata = commands:to_con_prod_metadata(State#state.producer_properties)
+  },
   case pulserl_conn:send_simple_command(
     State#state.connection, Command
   ) of
@@ -722,8 +727,17 @@ notify_instance_provider_of_state(
 validate_options(Options) when is_list(Options) ->
   erlwater_assertions:is_proplist(Options),
   lists:foreach(
-    fun({batch_enable, _} = Opt) ->
-      erlwater_assertions:is_boolean(Opt);
+    fun({producer, Options2} = Opt) ->
+      validate_options(Options2),
+      Opt;
+      ({name, _V} = Opt) ->
+        erlwater_assertions:is_string(Opt);
+      ({properties, _V} = Opt) ->
+        erlwater_assertions:is_proplist(Opt);
+      ({initial_sequence_id, _V} = Opt) ->
+        erlwater_assertions:is_non_negative_int(Opt);
+      ({batch_enable, _} = Opt) ->
+        erlwater_assertions:is_boolean(Opt);
       ({block_on_full_queue, _V} = Opt) ->
         erlwater_assertions:is_boolean(Opt);
       ({batch_max_messages, _V} = Opt) ->
@@ -734,12 +748,6 @@ validate_options(Options) when is_list(Options) ->
         erlwater_assertions:is_positive_int(Opt);
       ({max_pending_messages_across_partitions, _V} = Opt) ->
         erlwater_assertions:is_positive_int(Opt);
-      ({initial_sequence_id, _V} = Opt) ->
-        erlwater_assertions:is_non_negative_int(Opt);
-      ({producer_name, _V} = Opt) ->
-        erlwater_assertions:is_string(Opt);
-      ({properties, _V} = Opt) ->
-        erlwater_assertions:is_proplist(Opt);
       (Opt) ->
         error(unknown_producer_options, [Opt])
     end,
