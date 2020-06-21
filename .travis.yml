@@ -22,7 +22,6 @@ install:
 script:
   - rebar3 clean
   - rebar3 get-deps
-  - rebar3 eunit skip_deps=true
   - rebar3 ct skip_deps=true
   - rebar3 compile
 
