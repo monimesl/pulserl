@@ -20,9 +20,10 @@ install:
   - export PATH=$PWD:$PATH
 
 script:
-  - rebar3 get-deps
+  - rebar3 deps
   - rebar3 eunit
   - rebar3 ct
+  - rebar3 compile
 
 cache:
   directories:
