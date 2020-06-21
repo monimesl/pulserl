@@ -530,7 +530,6 @@ perform_handshake(#state{socket = Socket, socket_module = SockMod} = State) ->
       end
   end.
 
-
 activate_socket(State, Sock) ->
   SockOptsMod = socket_option_module(State),
   ok = SockOptsMod:setopts(Sock, [{active, true}]),

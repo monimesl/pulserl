@@ -123,7 +123,7 @@ init([#clientConfig{tls_enable = TlsEnable, service_url = ServiceUrl} = Config])
       case get_connection_to_one_of_these_logical_addresses(LogicalAddresses, State) of
         {Pid, LogicalAddr, NewState} ->
           erlang:register(?SERVICE_LOOKUP, Pid),
-          error_logger:info_msg("Service lookup connection created to: ~s", [LogicalAddr]),
+          error_logger:info_msg("The service lookup connection is pointed to ~p", [LogicalAddr]),
           {ok, NewState#state{service_lookup_connection = Pid}};
         {error, Reason} ->
           {stop, Reason}
@@ -240,8 +240,6 @@ discover_address(Topic, Command, CnxPid, State) ->
       {{error, Reason}, State}
   end.
 
-
-
 get_connection_to_one_of_these_logical_addresses([LogicalAddress | Rest], State) ->
   PhysicalAddresses = pulserl_utils:logical_to_physical_addresses(LogicalAddress, State#state.tls_enable),
   case get_connection(PhysicalAddresses, LogicalAddress, State) of
@@ -254,7 +252,6 @@ get_connection_to_one_of_these_logical_addresses([LogicalAddress | Rest], State)
     Result ->
       Result
   end.
-
 
 get_connection([], LogicalAddress, State) ->
   create_connection(LogicalAddress, State);

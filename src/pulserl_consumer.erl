@@ -254,8 +254,8 @@ handle_call({acknowledge, #messageId{topic = Topic} = MsgId, _Cumulative},
     false ->
       {reply, ?ERROR_CONSUMER_ID_NOT_KNOWN_HERE, State};
     _ ->
-      {Reply, NewState} = redirect_to_the_child_partition(MsgId, State),
-      {reply, Reply, NewState}
+      {Reply, State2} = redirect_to_the_child_partition(MsgId, State),
+      {reply, Reply, State2}
   end;
 
 %% The child/no-child-consumer
@@ -266,8 +266,8 @@ handle_call({acknowledge, #messageId{topic = TopicStr} = MsgId, Cumulative}, _Fr
     _ ->
       case topic_utils:is_persistent(Topic) of
         true ->
-          {Reply, NewState} = handle_acknowledgement(MsgId, Cumulative, State),
-          {reply, Reply, NewState};
+          {Reply, State2} = handle_acknowledgement(MsgId, Cumulative, State),
+          {reply, Reply, State2};
         _ ->
           {reply, ok, untrack_message(MsgId, Cumulative, State)}
       end
@@ -280,8 +280,8 @@ handle_call({negative_acknowledge, #messageId{topic = Topic} = MsgId},
     false ->
       {reply, ?ERROR_CONSUMER_ID_NOT_KNOWN_HERE, State};
     _ ->
-      {Reply, NewState} = redirect_to_the_child_partition(MsgId, State),
-      {reply, Reply, NewState}
+      {Reply, State2} = redirect_to_the_child_partition(MsgId, State),
+      {reply, Reply, State2}
   end;
 
 %% The child/no-child-consumer
@@ -298,18 +298,17 @@ handle_call(?RECEIVE_MESSAGE, _From,
     #state{partition_count = PartitionCount} = State) when PartitionCount > 0 ->
   %% This consumer is the partition parent.
   %% Redirect the client to all the consumers.
-  {Replay, NextState} =
+  {Replay, State3} =
     case partition_consumers_to_poll(?UNDEF, State) of
-      {[], NewState} ->
-        {?ERROR_CONSUMER_NOT_READY, NewState};
-      {Pids, NewState} ->
-        {{redirect, Pids}, NewState}
+      {[], State2} ->
+        {?ERROR_CONSUMER_NOT_READY, State2};
+      {Pids, State2} ->
+        {{redirect, Pids}, State2}
     end,
-  {reply, Replay, NextState};
+  {reply, Replay, State3};
 handle_call(?RECEIVE_MESSAGE, _From, #state{} = State) ->
-  {Reply, NewState} = handle_receive_message(State),
-  {reply, Reply, NewState};
-
+  {Reply, State2} = handle_receive_message(State),
+  {reply, Reply, State2};
 
 handle_call({seek, Target}, _From, #state{parent_consumer = Parent} = State) ->
   Res =
@@ -325,7 +324,7 @@ handle_call({seek, Target}, _From, #state{parent_consumer = Parent} = State) ->
   {reply, Res, State};
 
 handle_call(redeliver_unack_messages, _From, #state{parent_consumer = Parent} = State) ->
-  {Reply, NewState} =
+  {Reply, State3} =
     if not is_pid(Parent) ->
       foreach_child(
         fun(Pid) ->
@@ -347,7 +346,7 @@ handle_call(redeliver_unack_messages, _From, #state{parent_consumer = Parent} = 
             {ok, increase_flow_permits(State2, MessageQueueLen)}
         end
     end,
-  {reply, Reply, NewState};
+  {reply, Reply, State3};
 
 handle_call({send_to_dead_letter_topic, Message}, _From, State) ->
   {Reply, State2} = do_send_to_dead_letter_topic(Message, State),
@@ -358,7 +357,7 @@ handle_call(_Request, _From, State) ->
 
 handle_cast({close, AttemptRestart}, #state{partition_count = PartitionCount} = State) ->
   if AttemptRestart ->
-    NewState =
+    State2 =
       if PartitionCount > 0 ->
         error_logger:info_msg("Restarting ~p partitioned consumers of ~p",
           [PartitionCount, self()]),
@@ -368,18 +367,17 @@ handle_cast({close, AttemptRestart}, #state{partition_count = PartitionCount} = 
             [self(), State#state.consumer_subscription_name]),
           reinitialize(State)
       end,
-    {noreply, NewState};
+    {noreply, State2};
     true ->
       error_logger:info_msg("Consumer(~p) with subscription [~p] is permanelty closing",
         [self(), State#state.consumer_subscription_name]),
-      State2 = cancel_all_timers(State),
-      {close, normal, close_children(State2)}
+      State3 = cancel_all_timers(State),
+      {close, normal, close_children(State3)}
   end;
 
 handle_cast(Request, State) ->
   error_logger:warning_msg("Unexpected Cast: ~p", [Request]),
   {noreply, State}.
-
 
 handle_info({new_message, MsgId, RedeliveryCount, HeadersAndPayload},
     #state{topic = Topic} = State) ->
@@ -388,7 +386,7 @@ handle_info({new_message, MsgId, RedeliveryCount, HeadersAndPayload},
     {error, _} = Error ->
       {noreply, handle_message_error(MessageId, Error, State)};
     {Metadata, Payload} ->
-      {MetadataAndMessages, NewState} =
+      {MetadataAndMessages, State2} =
         case commands:has_messages_in_batch(Metadata) of
           false ->
             {[{Metadata, pulserl_utils:new_message(Topic, MessageId, Metadata, Payload, RedeliveryCount)}], State};
@@ -416,7 +414,7 @@ handle_info({new_message, MsgId, RedeliveryCount, HeadersAndPayload},
             NewBatchAckTrackers = maps:put(NewTrackerKey, BatchTracker, State#state.batch_ack_trackers),
             {SingleMetaAndMessages, State#state{batch_ack_trackers = NewBatchAckTrackers}}
         end,
-      {noreply, handle_messages(MetadataAndMessages, NewState)}
+      {noreply, handle_messages(MetadataAndMessages, State2)}
   end;
 
 %% Our connection is down. We stop all scheduled
@@ -442,24 +440,24 @@ handle_info(?ACKNOWLEDGMENT_TIMEOUT, State) ->
   {noreply, redeliver_ack_timeout_messages(State2)};
 
 handle_info(?SEND_ACKNOWLEDGMENTS, State) ->
-  NewState =
+  State3 =
     case do_send_pending_acknowledgements(State) of
       #state{} = State2 ->
         State2;
       _ ->
         State
     end,
-  {noreply, start_acknowledgments_send_timer(NewState)};
+  {noreply, start_acknowledgments_send_timer(State3)};
 
 handle_info({'EXIT', Pid, Reason}, State) ->
   case Reason of
     normal -> {noreply, State};
     _ ->
-      case maybe_inner_consumer_exited(Pid, Reason, State) of
+      case child_consumer_exited(Pid, Reason, State) of
         {error, Reason} ->
           {stop, Reason, State};
-        #state{} = NewState ->
-          {noreply, NewState}
+        #state{} = State2 ->
+          {noreply, State2}
       end
   end;
 
@@ -520,12 +518,12 @@ handle_negative_acknowledgement(#messageId{} = MsgId,
       nack_message_redelivery_timer = NegAckTimer,
       nack_messages_to_redeliver = NegAckMessages} = State) ->
   NegAckMsg = {erlwater_time:milliseconds() + NegAckDelay, MsgId},
-  NewState0 = State#state{nack_messages_to_redeliver = [NegAckMsg | NegAckMessages]},
-  NewState1 = untrack_message(MsgId, false, NewState0),
+  State2 = State#state{nack_messages_to_redeliver = [NegAckMsg | NegAckMessages]},
+  State3 = untrack_message(MsgId, false, State2),
   if NegAckTimer == ?UNDEF ->
-    start_nack_redelivery_timer(NewState1);
+    start_nack_redelivery_timer(State3);
     true ->
-      NewState1
+      State3
   end.
 
 redeliver_ack_timeout_messages(State) ->
@@ -556,9 +554,9 @@ redeliver_nack_messages(State) ->
     fun({WakeUpTime, _MsgId}) ->
       WakeUpTime =< NowMillis
     end, State#state.nack_messages_to_redeliver),
-  NewState = State#state{nack_messages_to_redeliver = RestOfNegAcknowledgments},
-  NewState2 = redeliver_messages([MsgId || {_, MsgId} <- MessagesToRedeliver], NewState),
-  start_nack_redelivery_timer(NewState2).
+  State2 = State#state{nack_messages_to_redeliver = RestOfNegAcknowledgments},
+  State3 = redeliver_messages([MsgId || {_, MsgId} <- MessagesToRedeliver], State2),
+  start_nack_redelivery_timer(State3).
 
 redeliver_messages([], State) ->
   State;
@@ -590,8 +588,8 @@ handle_acknowledgement(MsgId, Cumulative, State) ->
   end.
 
 handle_simple_acknowledgement(#messageId{} = MsgId, Cumulative, State) ->
-  NewState = untrack_message(MsgId, Cumulative, State),
-  {ok, send_acknowledgment(MsgId, Cumulative, NewState)}.
+  State2 = untrack_message(MsgId, Cumulative, State),
+  {ok, send_acknowledgment(MsgId, Cumulative, State2)}.
 
 handle_batch_acknowledgement(
     #messageId{batch = #batch{index = Index}} = MsgId,
@@ -626,7 +624,6 @@ handle_batch_acknowledgement(
       {ok, untrack_message(MsgId, Cumulative, State)}
   end.
 
-
 send_acknowledgment(MsgId, true, State) ->
   %% Don't delay cumulative ack. Send it now
   do_send_ack_now(MsgId, true, State);
@@ -640,24 +637,24 @@ send_acknowledgment(MsgId, _Cumulative,
       pending_acknowledgments = PendingAcknowledgments,
       max_pending_acknowledgments = MaxPendingAcknowledgments} = State) ->
   PendingAcknowledgments2 = sets:add_element(MsgId, PendingAcknowledgments),
-  NewState = State#state{pending_acknowledgments = PendingAcknowledgments2},
+  State2 = State#state{pending_acknowledgments = PendingAcknowledgments2},
   case sets:size(PendingAcknowledgments2) >= MaxPendingAcknowledgments of
     true ->
-      do_send_pending_acknowledgements(NewState);
+      do_send_pending_acknowledgements(State2);
     _ ->
-      NewState
+      State2
   end.
 
 do_send_ack_now(#messageId{} = MsgId, Cumulative,
     #state{consumer_id = ConsumerId} = State) ->
-  NewState =
+  State2 =
     case State#state.dead_letter_topic_messages of
       ?UNDEF -> State;
       Map ->
         State#state{dead_letter_topic_messages = maps:remove(MsgId, Map)}
     end,
   AckSendCommand = commands:new_ack(ConsumerId, MsgId, Cumulative),
-  send_actual_command(AckSendCommand, [MsgId], NewState).
+  send_actual_command(AckSendCommand, [MsgId], State2).
 
 do_send_pending_acknowledgements(
     #state{
@@ -669,8 +666,8 @@ do_send_pending_acknowledgements(
     _ ->
       MessageIds = sets:to_list(PendingAcknowledgments),
       AckSendCommand = commands:new_ack(ConsumerId, MessageIds),
-      NewState = send_actual_command(AckSendCommand, MessageIds, State),
-      NewState#state{pending_acknowledgments = sets:new()}
+      State2 = send_actual_command(AckSendCommand, MessageIds, State),
+      State2#state{pending_acknowledgments = sets:new()}
   end.
 
 send_actual_command(#'CommandAck'{} = Command, MessageIds,
@@ -811,7 +808,6 @@ do_send_to_dead_letter_topic1(Message, State) ->
       {ok, ack_and_clean_dead_letter_message(Message, State)}
   end.
 
-
 ack_and_clean_dead_letter_message(_,
     #state{state = ?UNDEF} = State) ->
   State;
@@ -870,8 +866,7 @@ read_payload_data(#'SingleMessageMetadata'{payload_size = PayloadSize}, RestOfDa
   <<Payload:PayloadSize/binary, Rest/binary>> = RestOfData,
   {Payload, Rest}.
 
-
-maybe_inner_consumer_exited(ExitedPid, Reason, State) ->
+child_consumer_exited(ExitedPid, Reason, State) ->
   case maps:get(ExitedPid, State#state.child_to_partition, false) of
     false ->
       %% We're told to exit by our parent
@@ -884,13 +879,13 @@ maybe_inner_consumer_exited(ExitedPid, Reason, State) ->
         child_to_partition = maps:remove(ExitedPid, State#state.child_to_partition)
       },
       case create_child_consumer(Partition, State2) of
-        {_NewPid, #state{} = NewState} ->
+        {_NewPid, #state{} = State3} ->
           error_logger:info_msg("Consumer=[~s ~p] restarted.",
             [topic_utils:partition_str(State#state.topic, Partition), self()]),
-          NewState;
-        {error, NewReason} = Error ->
+          State3;
+        {error, Reason2} = Error ->
           error_logger:error_msg("Consumer=[~s ~p] restart failed. Reason: ~p",
-            [topic_utils:partition_str(State#state.topic, Partition), self(), NewReason]),
+            [topic_utils:partition_str(State#state.topic, Partition), self(), Reason2]),
           Error
       end
   end.
@@ -906,8 +901,8 @@ reinitialize(State) ->
       State#state{
         re_init_attempts = State#state.re_init_attempts + 1,
         re_init_timer = erlang:send_after(NextAttemptTime, self(), ?REINITIALIZE)};
-    NewState ->
-      NewState
+    State2 ->
+      State2
   end.
 
 initialize(#state{topic = Topic} = State) ->
@@ -928,8 +923,8 @@ initialize(#state{topic = Topic} = State) ->
         end
     end,
   case Result of
-    #state{} = NewState ->
-      NewState#state{state = ?STATE_READY};
+    #state{} = State3 ->
+      State3#state{state = ?STATE_READY};
     _ -> Result
   end.
 
@@ -1018,9 +1013,8 @@ send_flow_permits(#state{connection = Cnx} = State, NumberOfMessages) ->
     _ -> State
   end.
 
-
 initialize_children(#state{partition_count = Total} = State) ->
-  {NewState, Err} = lists:foldl(
+  {State2, Err} = lists:foldl(
     fun(Index, {S, Error}) ->
       if Error == ?UNDEF ->
         case create_child_consumer(Index, S) of
@@ -1035,16 +1029,15 @@ initialize_children(#state{partition_count = Total} = State) ->
     end, {State, ?UNDEF}, lists:seq(0, Total - 1)),
   case Err of
     {error, _} ->
-      [pulserl_consumer:close(Pid, false) || {_, Pid} <- maps:keys(NewState#state.child_to_partition)],
+      [pulserl_consumer:close(Pid, false) || {_, Pid} <- maps:keys(State2#state.child_to_partition)],
       Err;
     ?UNDEF ->
-      NewState
+      State2
   end.
 
 
 create_child_consumer(Index, State) ->
   create_child_consumer(3, Index, State).
-
 
 create_child_consumer(Retries, Index,
     #state{topic = Topic, options = Opts} = State) ->
@@ -1110,8 +1103,6 @@ to_pulsar_initial_pos(Pos) ->
       'Earliest';
     _ -> Pos
   end.
-
-
 
 validate_options(Options) when is_list(Options) ->
   erlwater_assertions:is_proplist(Options),
@@ -1181,7 +1172,6 @@ choose_partition_consumer(Partition, State) ->
     Pid -> {ok, Pid}
   end.
 
-
 partition_consumers_to_poll(undefined,
     #state{partition_count = PartitionCount,
       children_poll_sequence = Sequence} = State) ->
@@ -1202,7 +1192,6 @@ partition_consumers_to_poll(undefined,
       end
     end, [], [HeadPartition | TailPartitions]),
   {Pids, State#state{children_poll_sequence = Sequence + 1}}.
-
 
 generate_consumer_id(#state{consumer_id = ?UNDEF}, Pid) ->
   pulserl_conn:register_handler(Pid, self(), consumer);
