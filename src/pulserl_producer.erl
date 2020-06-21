@@ -485,9 +485,9 @@ send_replies_to_waiters(Reply, Requests, State) ->
             apply(Fun, [Reply])
         end
       catch
-        _:Reason:Stacktrace ->
+        _:Reason ->
           error_logger:error_msg("Error(~p) on replying to "
-          "the client.", [{Reason, Stacktrace}])
+          "the client.", [{Reason}])
       end
     end, Requests),
   State.

@@ -4,7 +4,6 @@ notifications:
   email: false
 
 otp_release:
-  - 23.0
   - 22.3
   - 22.0
   - 21.3
@@ -22,6 +21,7 @@ install:
 script:
   - rebar3 clean
   - rebar3 get-deps
+  - rebar3 eunit skip_deps=true
   - rebar3 ct skip_deps=true
   - rebar3 compile
 
