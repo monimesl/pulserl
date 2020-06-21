@@ -83,10 +83,25 @@ In the Erlang shell
 ...
 
 ## Installation
+ [Pulserl is available in Hex](https://hex.pm/packages/pulserl) for easy installation by added it to your project dependencies.
 
-...
+In your Erlang project's `rebar.config` 
+ ```erlang
+{deps, [
+   {pulserl, "0.1.0"}
+]}
+```
 
-## API Examples
+In your Elixir project's `mix.exs` 
+ ```elixir
+def deps do
+  [
+    {:pulserl, "~> 0.1.0"}
+  ]
+end
+```
+
+## API Usage
 
 ...
 
