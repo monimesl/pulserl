@@ -350,8 +350,8 @@ handle_message(#'CommandMessage'{
 
 fetch_consumer_by_id(ConsumerId, State, Callback) ->
   case dict:find(ConsumerId, State#state.consumers) of
-    {ok, ProducerPid} ->
-      Callback(ProducerPid);
+    {ok, Consumer} ->
+      Callback(Consumer);
     _ ->
       Callback(undefined)
   end,
@@ -359,8 +359,8 @@ fetch_consumer_by_id(ConsumerId, State, Callback) ->
 
 fetch_producer_by_id(ProducerId, State, Callback) ->
   case dict:find(ProducerId, State#state.producers) of
-    {ok, ProducerPid} ->
-      Callback(ProducerPid);
+    {ok, Producer} ->
+      Callback(Producer);
     _ ->
       Callback(undefined)
   end,

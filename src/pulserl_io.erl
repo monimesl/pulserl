@@ -35,11 +35,11 @@ to_4bytes(I) when is_integer(I) ->
 %% @Read https://pulsar.apache.org/docs/en/develop-binary-protocol/#framing
 read_frame(Buffer) ->
   if byte_size(Buffer) > ?FRAME_LENGTH_INDICATOR_BYTE_SIZE ->
-    {FrameLength, Rest} = read_4bytes(Buffer),
-    if byte_size(Rest) >= FrameLength ->
-      <<Frame:FrameLength/binary, NewBuffer/binary>> = Rest,
-      CompleteFrame = <<FrameLength:32/unsigned-integer, Frame/binary>>,
-      {CompleteFrame, NewBuffer};
+    {Length, Rest} = read_4bytes(Buffer),
+    if byte_size(Rest) >= Length ->
+      <<Data:Length/binary, NewBuffer/binary>> = Rest,
+      Frame = <<Length:32/unsigned-integer, Data/binary>>,
+      {Frame, NewBuffer};
       true ->
         false
     end;
