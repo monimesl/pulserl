@@ -1,3 +1,5 @@
+[![Build Status](https://travis-ci.com/skulup/pulserl.svg?branch=master)](https://travis-ci.com/skulup/pulserl)
+
 # Pulserl 
 #### An Apache Pulsar client for Erlang/Elixir
 __Version:__ 0.1.0
