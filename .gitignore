@@ -18,4 +18,3 @@ _build
 rebar3.crashdump
 rebar.lock
 *~
-src/test.erl
