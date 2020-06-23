@@ -183,7 +183,7 @@ handle_info({Msg, Sock, Data}, #state{socket = Sock, data_buffer = DataBuffer} =
 
 handle_info({timeout, TimerRef, reconnect},
     #state{logical_address = LogicalAddress, reconnect_timer = TimerRef} = State) ->
-  error_logger:info_msg("Reconnecting to ~s", [LogicalAddress]),
+  error_logger:info_msg("Attempting a reconnect to ~s", [LogicalAddress]),
   {noreply, do_reconnect(State)};
 
 handle_info({Msg, Sock}, #state{socket = Sock} = State)
@@ -476,7 +476,12 @@ connect_to_brokers(State, [{IpAddress, Port} | Rest]) ->
   Result = connect_to_broker(State, IpAddress, Port, 3),
   case Rest of
     [] -> Result;
-    _ -> connect_to_brokers(State, Rest)
+    _ ->
+      case Result of
+        {error, _} ->
+          connect_to_brokers(State, Rest);
+        _ -> Result
+      end
   end.
 
 connect_to_broker(#state{socket_module = SockMod} = State, IpAddress, Port, Attempts) ->
@@ -494,7 +499,7 @@ connect_to_broker(#state{socket_module = SockMod} = State, IpAddress, Port, Atte
       case Attempts of
         0 -> {error, Reason};
         _ ->
-          timer:sleep(300),
+          timer:sleep(500),
           connect_to_broker(State, IpAddress, Port, Attempts - 1)
       end
   end.

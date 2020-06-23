@@ -12,30 +12,29 @@
 -include("pulsar_api.hrl").
 
 %% API
--export([read_frame/1, read_4bytes/1, to_2bytes/1, to_4bytes/1]).
+-export([read_frame/1, read_int32/1, write_int16/1, write_int32/1]).
 -export([encode_command/1, encode/3, decode_command/1, decode_metadata/1]).
 
--define(MAGIC_NUMBER, 16#0e01).
 -define(CMD_SIZE_LEN, 4).
--define(CHECKSUM_LEN, 4).
--define(METADATA_LEN, 4).
--define(MAGIC_NUMBER_LEN, 2).
+-define(CHECKSUM_SIZE_LEN, 4).
+-define(METADATA_SIZE_LEN, 4).
+-define(MAGIC_NUMBER_SIZE_LEN, 2).
+-define(MAGIC_NUMBER, 16#0e01).
+-define(FRAME_LENGTH_INDICATOR_BYTE_SIZE, 4).
 
-read_4bytes(<<Size:32/unsigned-integer, Rest/binary>>) ->
-  {Size, Rest}.
-
-to_2bytes(I) when is_integer(I) ->
+write_int16(I) when is_integer(I) ->
   <<I:16/unsigned-integer>>.
 
-to_4bytes(I) when is_integer(I) ->
+write_int32(I) when is_integer(I) ->
   <<I:32/unsigned-integer>>.
 
--define(FRAME_LENGTH_INDICATOR_BYTE_SIZE, 4).
+read_int32(<<Int:32/unsigned-integer, Rest/binary>>) ->
+  {Int, Rest}.
 
 %% @Read https://pulsar.apache.org/docs/en/develop-binary-protocol/#framing
 read_frame(Buffer) ->
   if byte_size(Buffer) > ?FRAME_LENGTH_INDICATOR_BYTE_SIZE ->
-    {Length, Rest} = read_4bytes(Buffer),
+    {Length, Rest} = read_int32(Buffer),
     if byte_size(Rest) >= Length ->
       <<Data:Length/binary, NewBuffer/binary>> = Rest,
       Frame = <<Length:32/unsigned-integer, Data/binary>>,
@@ -51,30 +50,31 @@ read_frame(Buffer) ->
 %% Format = [TOTAL_SIZE] [CMD_SIZE][CMD]
 encode_command(#'BaseCommand'{} = Command) ->
   Message = pulsar_api:encode_msg(Command),
-  CmdSize = to_4bytes(byte_size(Message)),
-  TotalSize = to_4bytes(byte_size(CmdSize) + byte_size(Message)),
+  CmdSize = write_int32(byte_size(Message)),
+  TotalSize = write_int32(byte_size(CmdSize) + byte_size(Message)),
   <<TotalSize/binary, CmdSize/binary, Message/binary>>;
 
-encode_command(InnerCommand) ->
-  BaseCmd = wrap_to_base_command(InnerCommand),
+encode_command(Command) ->
+  BaseCmd = wrap_to_base_command(Command),
   encode_command(BaseCmd).
 
 
 %% Format = [TOTAL_SIZE(4)] [CMD_SIZE(4)][CMD(~)] [MAGIC_NUMBER(2)][CHECKSUM(4)] [METADATA_SIZE(~)][METADATA(~)] [PAYLOAD(~)]
-encode(InnerCommand, #'MessageMetadata'{} = Meta, Payload) when is_binary(Payload) ->
+encode(InnerCommand, #'MessageMetadata'{} = Metadata, Payload) when is_binary(Payload) ->
   BaseCommand = wrap_to_base_command(InnerCommand),
-  SerializedCommand = pulsar_api:encode_msg(BaseCommand),
-  CmdSize = byte_size(SerializedCommand),
-  Metadata = pulsar_api:encode_msg(Meta),
-  MetadataSize = byte_size(Metadata),
-  MetadataSize_Metadata_Payload = [to_4bytes(MetadataSize), Metadata, Payload],
-  TotalSize = ?CMD_SIZE_LEN + CmdSize + ?MAGIC_NUMBER_LEN + ?CHECKSUM_LEN + ?METADATA_LEN + MetadataSize + byte_size(Payload),
+  EncodedCommand = pulsar_api:encode_msg(BaseCommand),
+  EncodedMetadata = pulsar_api:encode_msg(Metadata),
+  CommandSize = byte_size(EncodedCommand),
+  MetadataSize = byte_size(EncodedMetadata),
+  MetadataSize_Metadata_Payload = [write_int32(MetadataSize), EncodedMetadata, Payload],
+  TotalSize = ?CMD_SIZE_LEN + CommandSize + ?MAGIC_NUMBER_SIZE_LEN + ?CHECKSUM_SIZE_LEN +
+    ?METADATA_SIZE_LEN + MetadataSize + byte_size(Payload),
   iolist_to_binary([
-    to_4bytes(TotalSize),
-    to_4bytes(CmdSize),
-    SerializedCommand,
-    to_2bytes(?MAGIC_NUMBER),
-    to_4bytes(crc32c(MetadataSize_Metadata_Payload)), MetadataSize_Metadata_Payload]).
+    write_int32(TotalSize),
+    write_int32(CommandSize),
+    EncodedCommand,
+    write_int16(?MAGIC_NUMBER),
+    write_int32(crc32c(MetadataSize_Metadata_Payload)), MetadataSize_Metadata_Payload]).
 
 
 decode_command(Data) when is_binary(Data) ->
@@ -94,6 +94,8 @@ decode_command(Data) when is_binary(Data) ->
       fun(Val) -> Val /= undefined end,
       tuple_to_list(BaseCommand)
     ),
+  %% Anyway, pick the lucky first.
+  %% @Todo, return the list and handle each
   {hd(WrappedCommands), HeadersAndPayload}.
 
 decode_metadata(HeadersAndPayload) ->

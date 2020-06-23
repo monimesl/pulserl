@@ -121,9 +121,8 @@ init([#clientConfig{tls_enable = TlsEnable, service_url = ServiceUrl} = Config])
       },
       LogicalAddresses = maps:values(Physical2LogicalAddressMap),
       case get_connection_to_one_of_these_logical_addresses(LogicalAddresses, State) of
-        {Pid, LogicalAddr, NewState} ->
+        {Pid, _LogicalAddr, NewState} ->
           erlang:register(?SERVICE_LOOKUP, Pid),
-          error_logger:info_msg("The service lookup connection is pointed to ~p", [LogicalAddr]),
           {ok, NewState#state{service_lookup_connection = Pid}};
         {error, Reason} ->
           {stop, Reason}
@@ -360,7 +359,7 @@ update_physical_address_2_connections_map(PhysicalAddress, #cached_conn{} = Conn
   PhysicalAddress2Connections = maps:update_with(PhysicalAddress,
     fun(Connections) ->
       PidPos = #cached_conn.pid,
-      CnxPid = element(PidPos, Conn),
+      CnxPid = Conn#cached_conn.pid,
       case lists:keyfind(CnxPid, PidPos, Connections) of
         false -> [Conn | Connections];
         _ -> lists:keyreplace(CnxPid, PidPos, Connections, Conn)
@@ -368,9 +367,13 @@ update_physical_address_2_connections_map(PhysicalAddress, #cached_conn{} = Conn
     end,
     [Conn],
     State#state.physical_address_2_connections),
-  error_logger:info_msg("Pulsar connections to broker ~p is incremented by ~p ", [
-    maps:get(PhysicalAddress, State#state.physical_address_2_logical_address),
-    (length(maps:get(PhysicalAddress, PhysicalAddress2Connections)) -
-      length(maps:get(PhysicalAddress, State#state.physical_address_2_connections)))
-  ]),
+  if Conn#cached_conn.active ->
+    error_logger:info_msg("A connection(~p) to ~p is established",
+      [self(), maps:get(PhysicalAddress, State#state.physical_address_2_logical_address)]
+    );
+    true ->
+      error_logger:info_msg("The connection to ~p is dropped", [
+        maps:get(PhysicalAddress, State#state.physical_address_2_logical_address)
+      ])
+  end,
   State#state{physical_address_2_connections = PhysicalAddress2Connections}.

@@ -480,10 +480,10 @@ cancel_all_timers(#state{} = State) ->
     nack_message_redelivery_timer = do_cancel_timer(State#state.nack_message_redelivery_timer)
   }.
 
-do_cancel_timer(?UNDEF) ->
-  ?UNDEF;
-do_cancel_timer(TimeRef) ->
-  erlang:cancel_timer(TimeRef).
+do_cancel_timer(TimeRef) when is_reference(TimeRef) ->
+  erlang:cancel_timer(TimeRef);
+do_cancel_timer(Data) ->
+  Data.
 
 start_nack_redelivery_timer(#state{
   nack_message_redelivery_timer_tick = Time} = State) ->
@@ -707,7 +707,7 @@ handle_messages(MetadataAndMessages, State) ->
   State#state{incoming_messages = NewMessageQueue, dead_letter_topic_messages = DeadLetterMsgMap}.
 
 
-%% @Todo Remove `compacted_out` messages
+%% @Todo Handle `compacted_out` messages
 add_to_received_message_queue({_, Message}, MessageQueue, State) ->
   #'messageMeta'{redelivery_count = RedeliveryCount} = Message#'message'.metadata,
   MaxRedeliveryCount = State#state.dead_letter_topic_max_redeliver_count,
@@ -855,7 +855,7 @@ payload_to_messages(_Metadata, <<>>, Acc) ->
   lists:reverse(Acc);
 
 payload_to_messages(Metadata, Data, Acc) ->
-  {SingleMetadataSize, Rest} = pulserl_io:read_4bytes(Data),
+  {SingleMetadataSize, Rest} = pulserl_io:read_int32(Data),
   <<SingleMetadataBytes:SingleMetadataSize/binary, RestOfData/binary>> = Rest,
   SingleMetadata = pulsar_api:decode_msg(SingleMetadataBytes, 'SingleMessageMetadata'),
   {PayloadData, RestOfData2} = read_payload_data(SingleMetadata, RestOfData),
@@ -890,10 +890,7 @@ child_consumer_exited(ExitedPid, Reason, State) ->
       end
   end.
 
-
-reinitialize(#state{state = ?STATE_READY} = State) ->
-  State;
-reinitialize(State) ->
+reinitialize(#state{state = ?UNDEF} = State) ->
   case initialize(State) of
     {error, Reason} ->
       error_logger:error_msg("Re-initialization failed: ~p", [Reason]),
@@ -903,8 +900,12 @@ reinitialize(State) ->
         re_init_timer = erlang:send_after(NextAttemptTime, self(), ?REINITIALIZE)};
     State2 ->
       State2
-  end.
+  end;
+reinitialize(State) ->
+  State.
 
+initialize(#state{state = ?STATE_READY} = State) ->
+  State;
 initialize(#state{topic = Topic} = State) ->
   Result =
     case topic_utils:is_partitioned(Topic) of

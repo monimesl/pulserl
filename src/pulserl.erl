@@ -156,9 +156,9 @@ do_consume(PidOrTopic) ->
   case consume(PidOrTopic) of
     #consumedMessage{message = #message{value = Value}} = ConsumedMsg ->
       _ = ack(ConsumedMsg),
-      error_logger:info_msg("Consumer Received: ~p", [Value]);
-    {error, _} = Error ->
-      error(Error);
+      io:format("Consumer Received: ~p~n", [Value]);
+    {error, Reason} ->
+      error_logger:error_msg("Consumer Error. Reason = ~p", [Reason]);
     false ->
       timer:sleep(10),
       ok
