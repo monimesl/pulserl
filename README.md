@@ -1,5 +1,6 @@
 [![Build Status](https://travis-ci.com/skulup/pulserl.svg?branch=master)](https://travis-ci.com/skulup/pulserl)
-
+[![Language](https://img.shields.io/badge/Language-Erlang-a90533.svg)](https://www.erlang.org/)
+[![LICENSE](https://img.shields.io/badge/License-Apache%202-blue.svg)](https://github.com/skulup/pulserl/blob/master/LICENSE)
 # Pulserl 
 #### An Apache Pulsar client for Erlang/Elixir
 __Version:__ 0.1.0
