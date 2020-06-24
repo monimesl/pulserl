@@ -6,7 +6,7 @@
 __Version:__ 0.1.0
 
 Pulserl is an Erlang client for the Apache Pulsar Pub/Sub system with both producer and consumer implementations.
-It requires version __2.0+__ of Apache Pulsar and __19.0+__ of Erlang 
+It requires version __2.0+__ of Apache Pulsar and __18.0+__ of Erlang 
 
 ## Quick Examples
 
