@@ -78,10 +78,7 @@ In the Erlang shell
  - [ ] [Interceptors](https://github.com/apache/pulsar/wiki/PIP-23:-Message-Tracing-By-Interceptors)
  
  _Thank you [Sabudaye](https://github.com/skulup/pulserl/issues/2#issuecomment-616463542) for this information_
-
-## Overview
-
-...
+ 
 
 ## Installation
  [Pulserl is available in Hex](https://hex.pm/packages/pulserl) for easy installation by added it to your project dependencies.
@@ -102,7 +99,13 @@ def deps do
 end
 ```
 
+## Overview
+
+...
+
 ## API Usage
+
+### Client Setup
 
 ...
 

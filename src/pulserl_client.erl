@@ -13,7 +13,7 @@
 -include("pulsar_api.hrl").
 
 %% API
--export([start_link/1, stop/0]).
+-export([start_link/2, stop/0]).
 -export([get_broker_address/1, get_broker_connection/1, get_partitioned_topic_meta/1]).
 
 %% gen_server callbacks
@@ -37,11 +37,10 @@
 
 -record(state, {
   tls_enable,
-  cacertfile,
   service_urls,
-  connect_timeout_ms,
-  enable_tcp_no_delay,
-  enable_tcp_keep_alive,
+  socket_options,
+  connect_timeout,
+  tls_trust_certs_file,
   service_lookup_connection,
   max_connections_per_broker,
   cnx_lookup_current_pos = 0,
@@ -79,8 +78,8 @@ get_partitioned_topic_meta(#topic{} = Topic) ->
   gen_server:call(?SERVER, {get_partitioned_topic_meta, Topic}).
 
 
-start_link(Configs) ->
-  gen_server:start_link({local, ?SERVER}, ?MODULE, [Configs], []).
+start_link(ServiceUrl, #clientConfig{} = Config) ->
+  gen_server:start_link({local, ?SERVER}, ?MODULE, [ServiceUrl, Config], []).
 
 
 stop() ->
@@ -92,7 +91,8 @@ stop() ->
 %%%===================================================================
 
 
-init([#clientConfig{tls_enable = TlsEnable, service_url = ServiceUrl} = Config]) ->
+init([ServiceUrl, Config]) ->
+  TlsEnable = pulserl_utils:tls_enable(ServiceUrl),
   case parse_and_resolve_service_url(ServiceUrl, TlsEnable) of
     {error, Reason} ->
       {stop, Reason};
@@ -109,15 +109,14 @@ init([#clientConfig{tls_enable = TlsEnable, service_url = ServiceUrl} = Config])
       ets:new(partition_pending_messages, [named_table, set, public,
         {read_concurrency, true}, {write_concurrency, true}]),
       State = #state{
+        tls_enable = TlsEnable,
         service_urls = sets:to_list(ServiceUrls),
-        tls_enable = Config#clientConfig.tls_enable,
-        cacertfile = Config#clientConfig.cacertfile,
+        socket_options = Config#clientConfig.socket_options,
+        connect_timeout = Config#clientConfig.connect_timeout_ms,
+        tls_trust_certs_file = Config#clientConfig.tls_trust_certs_file,
         physical_address_2_connections = PhysicalAddress2CnxMap,
         physical_address_2_logical_address = Physical2LogicalAddressMap,
-        max_connections_per_broker = Config#clientConfig.max_connections_per_broker,
-        enable_tcp_keep_alive = Config#clientConfig.enable_tcp_keep_alive,
-        enable_tcp_no_delay = Config#clientConfig.enable_tcp_no_delay,
-        connect_timeout_ms = Config#clientConfig.connect_timeout_ms
+        max_connections_per_broker = Config#clientConfig.max_connections_per_broker
       },
       LogicalAddresses = maps:values(Physical2LogicalAddressMap),
       case get_connection_to_one_of_these_logical_addresses(LogicalAddresses, State) of
@@ -316,9 +315,9 @@ create_connection(LogicalAddress, #state{} = State) ->
   ConnOpts = [
     {address, LogicalAddress},
     {tls_enable, State#state.tls_enable},
-    {tls_cacertfile, State#state.cacertfile},
-    {nodelay, State#state.enable_tcp_no_delay},
-    {keepalive, State#state.enable_tcp_keep_alive}
+    {socket_options, State#state.socket_options},
+    {connect_timeout, State#state.connect_timeout},
+    {tls_trust_certs_file, State#state.tls_trust_certs_file}
   ],
   case pulserl_conn:create(ConnOpts) of
     {ok, CnxPid} ->

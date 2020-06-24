@@ -67,10 +67,8 @@
 }).
 
 -record(clientConfig, {
-  service_url :: string(),
-  enable_tcp_no_delay :: boolean(),
-  enable_tcp_keep_alive :: boolean(),
-  connect_timeout_ms :: pos_integer(),
-  max_connections_per_broker :: pos_integer(),
-  tls_enable :: boolean(),
-  cacertfile :: string() | ?UNDEF}).
+  socket_options = [] :: list(),
+  connect_timeout_ms = 15000 :: pos_integer(),
+  max_connections_per_broker = 1 :: pos_integer(),
+  tls_trust_certs_file :: string() | ?UNDEF
+}).

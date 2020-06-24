@@ -14,7 +14,13 @@
 -export([new_message_id/2, new_message_id/4, new_message/5, new_message/6]).
 
 %% API
--export([hash_key/2, get_int_env/2, get_env/2, resolve_uri/2, to_logical_address/3, sock_address_to_string/2, logical_to_physical_addresses/2]).
+-export([tls_enable/1, hash_key/2, get_int_env/2, get_env/2, resolve_uri/2, to_logical_address/3, sock_address_to_string/2, logical_to_physical_addresses/2]).
+
+tls_enable(ServiceUrl) when is_binary(ServiceUrl) ->
+  tls_enable(binary_to_list(ServiceUrl));
+
+tls_enable(ServiceUrl) ->
+  string:str(ServiceUrl, "pulsar+ssl://") > 0.
 
 new_message_id(Topic, #'MessageIdData'{} = MessageIdData) ->
   new_message_id(Topic, MessageIdData, -1, 0).

@@ -11,12 +11,24 @@
 -include("pulserl.hrl").
 %% API
 -export([await/1, await/2]).
+-export([start_client/1, start_client/2]).
 -export([produce/2, produce/3, produce/4]).
 -export([sync_produce/2, sync_produce/3]).
 -export([consume/1, ack/1, ack_cumulative/1, nack/1]).
 -export([start_consumption_in_background/1]).
 
+
 %%--------------------------------------------------------------------
+%% @doc
+%% @end
+%%--------------------------------------------------------------------
+start_client(ServiceUrl) ->
+  start_client(ServiceUrl, #clientConfig{}).
+
+start_client(ServiceUrl, ClientConfig) ->
+  pulserl_client_sup:start_client(ServiceUrl, ClientConfig).
+
+%% %%--------------------------------------------------------------------
 %% @doc
 %% @end
 %%--------------------------------------------------------------------

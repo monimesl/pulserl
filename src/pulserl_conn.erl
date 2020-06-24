@@ -77,6 +77,7 @@ start_link(Args) ->
   data_buffer = <<>>,
   socket_address,
   logical_address,
+  connect_timeout,
   tcp_options,
   %% Server's
   server_version,
@@ -95,23 +96,20 @@ start_link(Args) ->
 
 }).
 
-
 init(Opts) ->
-  TcpOptions = [
-    {nodelay, proplists:get_value(nodelay, Opts, true)},
-    {keepalive, proplists:get_value(keepalive, Opts, true)}
-  ],
+  TcpOptions = socket_options(Opts),
   {SockMod, TcpOptions2} =
     case proplists:get_value(tls_enable, Opts, false) of
       true ->
-        CaCertFile = proplists:get_value(cacertfile, Opts),
-        {ssl, [{cacertfile, CaCertFile} | TcpOptions]};
+        TlsTrustCertFile = proplists:get_value(tls_trust_certs_file, Opts),
+        {ssl, [{cacertfile, TlsTrustCertFile} | TcpOptions]};
       _ -> {gen_tcp, TcpOptions}
     end,
   State = #state{
     socket_module = SockMod,
     tcp_options = TcpOptions2,
-    logical_address = proplists:get_value(address, Opts)
+    logical_address = proplists:get_value(address, Opts),
+    connect_timeout = proplists:get_value(connect_timeout, Opts, 15000)
   },
   case create_connection(State) of
     {ok, NewState} ->
@@ -449,7 +447,7 @@ do_send_internal2(RequestData, RequestId, #state{socket = Sock, socket_module = 
 schedule_reconnect(#state{connect_attempts = Attempts} = State) ->
   Delay = ?RECONNECT_BASE_DELAY bsl Attempts,
   Delay2 = erlang:min(Delay, ?RECONNECT_MAX_DELAY),
-  DelayJitter = random:uniform(?RECONNECT_MAX_DELAY_JITTER),
+  DelayJitter = rand:uniform(?RECONNECT_MAX_DELAY_JITTER),
   NextReconnectDelay =
     if (DelayJitter rem 2) == 0 ->
       Delay2 + DelayJitter;
@@ -498,11 +496,11 @@ connect_to_brokers(State, [{IpAddress, Port} | Rest]) ->
       end
   end.
 
-connect_to_broker(#state{socket_module = SockMod} = State, IpAddress, Port) ->
-  TcpOptions = [
-    binary, {active, false}
-    | State#state.tcp_options],
-  case SockMod:connect(IpAddress, Port, TcpOptions) of
+connect_to_broker(#state{
+  socket_module = SockMod,
+  connect_timeout = ConnectTimeout} = State, IpAddress, Port) ->
+  TcpOptions = [binary, {active, false} | State#state.tcp_options],
+  case SockMod:connect(IpAddress, Port, TcpOptions, ConnectTimeout) of
     {ok, Socket} ->
       {ok, State#state{
         socket_address = {IpAddress, Port},
@@ -549,11 +547,18 @@ activate_socket(State, Sock) ->
   ok = SockOptsMod:setopts(Sock, [{active, true}]),
   Sock.
 
-optimize_socket(State, Sock) ->
-  SockOptsMod = socket_option_module(State),
-  {ok, [{_, BufferSize1}, {_, BufferSize2}]} =
-    SockOptsMod:getopts(Sock, [sndbuf, recbuf]),
-  _ = SockOptsMod:setopts(Sock, [{buffer, max(BufferSize1, BufferSize2)}]),
+optimize_socket(#state{tcp_options = TcpOpts} = State, Sock) ->
+  %% Ensure we are not overriding
+  case {proplists:get_value(sndbuf, TcpOpts, ?UNDEF),
+    proplists:get_value(recbuf, TcpOpts, ?UNDEF)} of
+    {?UNDEF, ?UNDEF} ->
+      SockOptsMod = socket_option_module(State),
+      {ok, [{_, BufferSize1}, {_, BufferSize2}]} =
+        SockOptsMod:getopts(Sock, [sndbuf, recbuf]),
+      _ = SockOptsMod:setopts(Sock, [{buffer, max(BufferSize1, BufferSize2)}]);
+    _ ->
+      ok
+  end,
   Sock.
 
 broadcast_error_then_reconnect(Error, State) ->
@@ -588,3 +593,24 @@ socket_option_module(#state{socket_module = gen_tcp}) ->
   inet;
 socket_option_module(#state{socket_module = SockMode}) ->
   SockMode.
+
+socket_options(CnxOpts) ->
+  Options = proplists:get_value(socket_options, CnxOpts, []),
+  Options2 = add_option(Options, {nodelay, true}),
+  Options3 = add_option(Options2, {keepalive, true}),
+  lists:filter(
+    fun(binary) ->
+      false;
+      ({active, _}) ->
+        false;
+      (_) ->
+        true
+    end, Options3).
+
+add_option(Options, {Name, _} = Opt) ->
+  case proplists:get_value(Name, Options, ?UNDEF) of
+    ?UNDEF ->
+      [Opt | Options];
+    _ ->
+      Options
+  end.

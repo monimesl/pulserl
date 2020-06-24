@@ -10,17 +10,16 @@
 
 -behaviour(supervisor).
 
--export([start_link/1]).
+-export([start_link/0]).
 
 -export([init/1]).
 
 -define(SERVER, ?MODULE).
 
-start_link(ClientConfig) ->
-  supervisor:start_link({local, ?SERVER}, ?MODULE, [ClientConfig]).
+start_link() ->
+  supervisor:start_link({local, ?SERVER}, ?MODULE, []).
 
-
-init([ClientConfig]) ->
+init([]) ->
   SupFlags = #{strategy => one_for_all,
     intensity => 0,
     period => 1},
@@ -55,12 +54,11 @@ init([ClientConfig]) ->
       modules => [pulserl_consumer_sup]
     },
     #{
-      id => pulserl_client,
-      start => {pulserl_client, start_link, [ClientConfig]},
+      id => pulserl_client_sup,
+      start => {pulserl_client_sup, start_link, []},
       restart => permanent,
-      shutdown => 10000,
-      type => worker,
-      modules => [pulserl_client]
+      type => supervisor,
+      modules => [pulserl_client_sup]
     }
   ],
   {ok, {SupFlags, ChildSpecs}}.

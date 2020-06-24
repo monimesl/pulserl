@@ -1,0 +1,9 @@
+[
+  {pulserl, [
+    {autostart, true}  %% Default is true
+    , {connect_timeout_ms, 15000} %% See #clientConfig{}
+    , {max_connections_per_broker, 1}  %% See #clientConfig{}
+    , {service_url, "pulsar+ssl://localhost:6651/"}  %% See #clientConfig{}
+    , {tls_trust_certs_file, "/path/to/ca.cert.pem"} %% Required if the TLS url is used
+  ]}
+].

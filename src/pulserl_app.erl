@@ -12,8 +12,7 @@
 -include("pulserl.hrl").
 
 %% Application callbacks
--export([start/2,
-  stop/1, client_config/0]).
+-export([start/2, stop/1]).
 
 %%%===================================================================
 %%% Application callbacks
@@ -36,8 +35,29 @@
   {ok, pid(), State :: term()} |
   {error, Reason :: term()}).
 start(_StartType, _StartArgs) ->
-  ClientConfig = client_config(),
-  pulserl_sup:start_link(ClientConfig).
+  case pulserl_sup:start_link() of
+    {ok, _} = Success ->
+      ServiceUrl =
+        case pulserl_utils:get_env(service_url, ?UNDEF) of
+          ?UNDEF ->
+            def_service_url();
+          Val -> Val
+        end,
+      case pulserl_utils:get_env(autostart, true) of
+        false ->
+          Success;
+        _ ->
+          ClientConfig = client_config(ServiceUrl),
+          case pulserl:start_client(ServiceUrl, ClientConfig) of
+            ok ->
+              Success;
+            Other ->
+              Other
+          end
+      end;
+    Other ->
+      Other
+  end.
 
 %%--------------------------------------------------------------------
 %% @private
@@ -56,39 +76,29 @@ stop(_State) ->
 %%% Internal functions
 %%%===================================================================
 
-client_config() ->
+client_config(ServiceUrl) ->
   MaxConnectionsPerBroker = pulserl_utils:get_int_env(max_connections_per_broker, 1),
-  if MaxConnectionsPerBroker < 1 orelse MaxConnectionsPerBroker > 64 ->
-    error("The `max_connections_per_broker` value must respect the interval (0, 64]");
+  if MaxConnectionsPerBroker < 1 orelse MaxConnectionsPerBroker > 16 ->
+    error("The `max_connections_per_broker` value must respect the interval (0, 16]");
     true ->
       ok
   end,
-  ServiceUrl =
-    case pulserl_utils:get_env(service_url, ?UNDEF) of
-      ?UNDEF ->
-        def_service_url();
-      Val -> Val
-    end,
-  {TlsEnable, CaCertFile} =
-    case string:str(ServiceUrl, "pulsar+ssl://") > 0 of
+  CaCertFile =
+    case pulserl_utils:tls_enable(ServiceUrl) of
       true ->
-        case pulserl_utils:get_env(cacertfile, ?UNDEF) of
-          ?UNDEF -> error("No CA certificate file is provided");
+        case pulserl_utils:get_env(tls_trust_certs_file, ?UNDEF) of
+          ?UNDEF -> error("No TLS trust certificates file is provided");
           CaCertFile0 ->
-            {true, CaCertFile0}
+            CaCertFile0
         end;
-      _ -> {false, ?UNDEF}
+      _ -> ?UNDEF
     end,
   #clientConfig{
-    tls_enable = TlsEnable,
-    cacertfile = CaCertFile,
-    service_url = ServiceUrl,
+    tls_trust_certs_file = CaCertFile,
     max_connections_per_broker = MaxConnectionsPerBroker,
-    enable_tcp_no_delay = pulserl_utils:get_env(enable_tcp_no_delay, true),
-    enable_tcp_keep_alive = pulserl_utils:get_env(enable_tcp_keep_alive, true),
+    socket_options = pulserl_utils:get_env(socket_options, []),
     connect_timeout_ms = pulserl_utils:get_int_env(connect_timeout_ms, 15000)
   }.
-
 
 def_service_url() ->
   {ok, Hostname} = inet:gethostname(),
