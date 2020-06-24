@@ -103,7 +103,7 @@ end
 ## API Usage
 
 ### Client Setup
-  In pulserl, the client as of now(for API simplicity) is a singleton(local registered `gen_server`) 
+  In pulserl, the client as of now (for API simplicity) is a singleton (local registered `gen_server`) 
   and can be created during startup by the `application controller` or on demand at a later time.
   The client has the responsibility of creating the TCP connections,
   maintaining the connection pool, and ensures these connections are 
@@ -111,7 +111,7 @@ end
   for querying metadata needed to initialize a producer or consumer; it does this
   by creating a metadata socket during initialization by using the provided configurations.
 
-  #### Default client startup
+  #### Automatic client startup
    You can configure the client that will be auto-started by providing
    the following configuration for `pulserl` in your `sys.config` file.
 ```erlang
@@ -142,7 +142,7 @@ end
              connect_timeout_ms = 30000,
              max_connections_per_broker = 1,
              socket_options = [{nodelay, true}],
-             tls_trust_certs_file = "/path/to/cacert.pem",
+             tls_trust_certs_file = "/path/to/cacert.pem"
            },
  ok = pulserl:start_client(ServiceUrl, ClientConfig).
 ```  
