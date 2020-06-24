@@ -33,7 +33,9 @@
 -define(LOST_CONNECTION_ERROR, {error, lost_connection}).
 -define(CLOSED_CONNECTION_ERROR, {error, closed_connection}).
 
--define(RECONNECT_INTERVAL, 1000).
+-define(RECONNECT_MAX_DELAY_JITTER, 500).
+-define(RECONNECT_BASE_DELAY, 1000).
+-define(RECONNECT_MAX_DELAY, 16000).
 -define(STATE_READY, ready).
 
 
@@ -80,6 +82,7 @@ start_link(Args) ->
   server_version,
   protocol_version,
   max_message_size,
+  connect_attempts = 0 :: integer(),
   reconnect_timer,
   %% conn states
   request_id = 1,
@@ -443,15 +446,25 @@ do_send_internal2(RequestData, RequestId, #state{socket = Sock, socket_module = 
   end.
 
 
-schedule_reconnect(State) ->
-  TimerRef = erlang:start_timer(?RECONNECT_INTERVAL, self(), reconnect),
-  State#state{reconnect_timer = TimerRef}.
-
+schedule_reconnect(#state{connect_attempts = Attempts} = State) ->
+  Delay = ?RECONNECT_BASE_DELAY bsl Attempts,
+  Delay2 = erlang:min(Delay, ?RECONNECT_MAX_DELAY),
+  DelayJitter = random:uniform(?RECONNECT_MAX_DELAY_JITTER),
+  NextReconnectDelay =
+    if (DelayJitter rem 2) == 0 ->
+      Delay2 + DelayJitter;
+      true ->
+        Delay2 - DelayJitter
+    end,
+  error_logger:info_msg("The next reconnection attempt(~p) "
+  "will be in ~p milliseconds", [Attempts + 1, NextReconnectDelay]),
+  TimerRef = erlang:start_timer(NextReconnectDelay, self(), reconnect),
+  State#state{reconnect_timer = TimerRef, connect_attempts = Attempts + 1}.
 
 do_reconnect(State) ->
   case (case create_connection(State) of
-          {ok, NewState} ->
-            case perform_handshake(NewState) of
+          {ok, State2} ->
+            case perform_handshake(State2) of
               {ok, #state{socket = Socket} = Ns} ->
                 error_logger:info_msg("Connection to ~s is re-established!",
                   [Ns#state.logical_address]),
@@ -463,7 +476,7 @@ do_reconnect(State) ->
             ok
         end)
   of
-    #state{} = State2 -> State2;
+    #state{} = State3 -> State3;
     _ -> schedule_reconnect(State)
   end.
 
@@ -473,18 +486,19 @@ create_connection(#state{logical_address = LogicalAddress, socket_module = SockM
 
 
 connect_to_brokers(State, [{IpAddress, Port} | Rest]) ->
-  Result = connect_to_broker(State, IpAddress, Port, 3),
+  Result = connect_to_broker(State, IpAddress, Port),
   case Rest of
     [] -> Result;
     _ ->
       case Result of
         {error, _} ->
+          timer:sleep(50),
           connect_to_brokers(State, Rest);
         _ -> Result
       end
   end.
 
-connect_to_broker(#state{socket_module = SockMod} = State, IpAddress, Port, Attempts) ->
+connect_to_broker(#state{socket_module = SockMod} = State, IpAddress, Port) ->
   TcpOptions = [
     binary, {active, false}
     | State#state.tcp_options],
@@ -493,15 +507,10 @@ connect_to_broker(#state{socket_module = SockMod} = State, IpAddress, Port, Atte
       {ok, State#state{
         socket_address = {IpAddress, Port},
         socket = optimize_socket(State, Socket)}};
-    {error, Reason} ->
+    {error, Reason} = Error ->
       error_logger:error_msg("Unable to connect to broker at: ~s. "
       "Reason: ~p", [pulserl_utils:sock_address_to_string(IpAddress, Port), Reason]),
-      case Attempts of
-        0 -> {error, Reason};
-        _ ->
-          timer:sleep(500),
-          connect_to_broker(State, IpAddress, Port, Attempts - 1)
-      end
+      Error
   end.
 
 
