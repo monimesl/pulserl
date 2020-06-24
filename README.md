@@ -5,9 +5,10 @@
 #### An Apache Pulsar client for Erlang/Elixir
 __Version:__ 0.1.0
 
-Pulserl is an Erlang client for the Apache Pulsar Pub/Sub system with both producer and consumer implementations.
-It requires version __2.0+__ of Apache Pulsar and __18.0+__ of Erlang 
-
+Pulserl is an Erlang client for the Apache Pulsar Pub/Sub system with both producer and consumer
+implementations. It requires version __2.0+__ of Apache Pulsar and __18.0+__ of Erlang. 
+Pulserl uses the [binary protocol](http://pulsar.apache.org/docs/en/develop-binary-protocol)
+to interact with the Pulsar brokers and exposes a very simple API. 
 ## Quick Examples
 
 The examples assume you have a running Pulsar broker at `localhost:6650`, a topic called `test-topic` (can be partitioned or not) and `rebar3` installed.
@@ -99,15 +100,56 @@ def deps do
 end
 ```
 
-## Overview
-
-...
-
 ## API Usage
 
 ### Client Setup
+  In pulserl, the client as of now(for API simplicity) is a singleton(local registered `gen_server`) 
+  and can be created during startup by the `application controller` or on demand at a later time.
+  The client has the responsibility of creating the TCP connections,
+  maintaining the connection pool, and ensures these connections are 
+  maximally used by the producers and consumers. The client is also responsible
+  for querying metadata needed to initialize a producer or consumer; it does this
+  by creating a metadata socket during initialization by using the provided configurations.
 
+  #### Default client startup
+   You can configure the client that will be auto-started by providing
+   the following configuration for `pulserl` in your `sys.config` file.
+```erlang
+[
+  {pulserl, [
+    {autostart, true} %% If false, the client will created on startup. Default is true.
+    %% The TCP connect timeout in milliseconds. Default is 30000.
+    , {connect_timeout_ms, 30000}
+    %% The maximum connections to each broker the client should create.
+    %% Default is 1. Increasing this may improve I/O throughput
+    , {max_connections_per_broker, 1}
+    %% The underlying TCP socket options.
+    %% https://erlang.org/doc/man/gen_tcp.html#type-connect_option
+    , {socket_options, [{nodelay, true}]}
+    %% The service url. Default is the non TLS url: "pulsar://${hostname}:6650"
+    , {service_url, "pulsar+ssl://localhost:6651/"}
+    %% The trust certificate file path. Required on if the TLS service url is used.
+    %% See http://pulsar.apache.org/docs/en/security-tls-transport/
+    , {tls_trust_certs_file, "/path/to/cacert.pem"}
+  ]}
+].
+```  
+  #### On demand client startup
+  The `pulserl:start_client/1,2` API can be used to start the pulserl client when needed. 
+```erlang
+ ServiceUrl = "pulsar+ssl://localhost:6651/",
+ Config = #clientConfig{
+             connect_timeout_ms = 30000,
+             max_connections_per_broker = 1,
+             socket_options = [{nodelay, true}],
+             tls_trust_certs_file = "/path/to/cacert.pem",
+           },
+ ok = pulserl:start_client(ServiceUrl, ClientConfig).
+```  
+
+### Producer 
 ...
+
 
 ## Contribute 
 

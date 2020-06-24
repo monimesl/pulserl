@@ -1,9 +1,18 @@
 [
   {pulserl, [
-    {autostart, true}  %% Default is true
-    , {connect_timeout_ms, 15000} %% See #clientConfig{}
-    , {max_connections_per_broker, 1}  %% See #clientConfig{}
-    , {service_url, "pulsar+ssl://localhost:6651/"}  %% See #clientConfig{}
-    , {tls_trust_certs_file, "/path/to/ca.cert.pem"} %% Required if the TLS url is used
+    {autostart, true} %% If false, the client will created on startup. Default is true.
+    %% The TCP connect timeout in milliseconds. Default is 15000.
+    , {connect_timeout_ms, 30000}
+    %% The maximum connections to each broker the client should create.
+    %% Default is 1. Increasing this may improve I/O throughput
+    , {max_connections_per_broker, 1}
+    %% The underlying TCP socket options.
+    %% https://erlang.org/doc/man/gen_tcp.html#type-connect_option
+    %% https://erlang.org/doc/man/ssl.html#type-tls_client_option if TLS
+    , {socket_options, [{nodelay, true}]}
+    %% The service url. Default is the non TLS url: "pulsar://${hostname}:6650"
+    , {service_url, "pulsar+ssl://localhost:6651/"}
+    %% The trust certificate file path. See http://pulsar.apache.org/docs/en/security-tls-transport/
+    , {tls_trust_certs_file, "/path/to/cacert.pem"}
   ]}
 ].

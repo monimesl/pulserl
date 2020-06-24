@@ -77,13 +77,12 @@ new_message(Topic, MessageId, #'MessageMetadata'{} = Meta, #'SingleMessageMetada
   Message2#message{metadata = Metadata2}.
 
 
-hash_key(undefined, Divisor) ->
+hash_key(?UNDEF, Divisor) ->
   hash_key(<<>>, Divisor);
 hash_key(<<>>, Divisor) ->
-  hash_key(crypto:strong_rand_bytes(8), Divisor);
+  rand:uniform(Divisor) - 1;
 hash_key(Key, Divisor) ->
   erlang:abs(crc32cer:nif(Key)) rem Divisor.
-
 
 sock_address_to_string(Ip, Port) ->
   inet:ntoa(Ip) ++ ":" ++ integer_to_list(Port).

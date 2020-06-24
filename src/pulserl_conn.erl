@@ -503,6 +503,7 @@ connect_to_broker(#state{
   case SockMod:connect(IpAddress, Port, TcpOptions, ConnectTimeout) of
     {ok, Socket} ->
       {ok, State#state{
+        connect_attempts = 0,
         socket_address = {IpAddress, Port},
         socket = optimize_socket(State, Socket)}};
     {error, Reason} = Error ->
