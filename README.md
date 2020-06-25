@@ -149,16 +149,17 @@ end
 
 ### Producer 
 Pulserl creates a `gen_server` process per topic. For a topic of `n` partition, it creates
-a parent producer under the `pulserl_producer_sup` tree which in turn `start_link` and 
-manage `n` child producers. The parent producer serves as a facade to the internal producers.
+a parent producer under the `pulserl_producer_sup` supervision tree which in turn `start_link`
+and manage `n` child producers. The parent producer serves as a facade to the internal producers.
 The parent monitor the child processes (internal partitioned producers) for resilience, 
-route client calls to one of the child processes using different routing modes. 
+route client calls to one of the child processes using different 
+[routing modes](https://pulsar.apache.org/docs/en/concepts-messaging/#routing-modes). 
 A producer during initialization is assigned a connection by the client based on its topic metadata.
 The producers uses a queueing mechanism on message sending. 
 Each send is internally a `gen_server.call/2` to the producer process. The caller is added to 
 a queue and replied immediately with `ok.` This initial early reply frees up the caller to do 
-other tasks if the response is not need immediately. Internally if message send is trigger, i.e
-when batching is not enable or batching enabled but a batch send is triggered, the producer
+other tasks if the response is not needed immediately. Internally if message send is trigger, i.e
+when batching is not enable or batching enabled and a batch send is triggered, the producer
 asynchronously send (`gen_sever.cast/2`) the message(s) to the `pulserl_conn` process. When the
 connection process receives the response it will `!` send it to associated the producer which in 
 turn dequeue the associated caller and reply to it.
@@ -169,9 +170,9 @@ In synchronous mode, the call will wait for the broker to acknowledge the messag
 If the acknowledgment is not received and a `send_timeout` is specified, a `{error, send_timeout}`
 is sent to client on timed out. 
 
-The asynchronous mode provides two API. One uses a `promise` that will be used to probe 
-for a response or error. The other uses callback `fun/1` that will be invoke internally 
-by the producer process when there is a response or error.
+The asynchronous mode provides two API. One returns a `reference()` that will be used to probe 
+for a response or error. The other allows one to pass a callback `fun/1` that will be invoke 
+internally by the producer process when there is a response or error.
 
 #### Starting a producer
 ...
