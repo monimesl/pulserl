@@ -269,9 +269,7 @@ handle_call({send_message, ClientFrom, Message}, _From,
       {reply, Reply, increment_sent_metric(State2, 1)};
     _ ->
       {reply, ?ERROR_PRODUCER_QUEUE_IS_FULL, State}
-  end,
-  {Reply, State2} = send_message(Message, ClientFrom, State),
-  {reply, Reply, increment_sent_metric(State2, 1)};
+  end;
 handle_call(Request, _From, State) ->
   error_logger:warning_msg("Unexpected call: ~p in ~p(~p)", [Request, ?MODULE, self()]),
   {reply, ok, State}.
