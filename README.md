@@ -175,6 +175,54 @@ for a response or error. The other allows one to pass a callback `fun/1` that wi
 internally by the producer process when there is a response or error.
 
 #### Starting a producer
+Start a producer with `pulserl:start_producer/1,2` by passing a topic name and list of options.
+If `start_producer/1` is used, the producer will be started with a default options which can be provided 
+as an environment variable in `sys.config`.
+
+```erlang
+[
+  {pulserl, [
+    {producer_opts, [{batch_enable, true}]}
+]}
+]
+```
+
+A sample start producer API code:
+```erlang
+  ProducerOpts = [
+    {producer, [
+      {name, "my_producer_name"}, %% Name of producer in the pulsar cluster
+       %% Metadata attached to the producer for easier identification 
+        {properties, #{"language" => "erlang"}}, %% This can be proplist of as well
+         %% The initial sequence id for the producer
+        {initial_sequence_id, 0}, %% Default with 0
+    ]},
+     %% The time duration in milliseconds after which if the broker does not
+     %% acknowledge an error will be reported. The default is 30000
+    {send_timeout, 20000},
+     %% This logic is applied when the caller is not setting a key on a message. 
+     %% If the key is set with, then the hash of the key will be used to choose
+     %% which of the partition the message will be published to.
+     %% Possible values: round_robin_routing, single_routing
+     %% and {Module, Function} which will be called with the key and
+     %%.partition count to return the selected partition.
+    {routing_mode, round_robin_routing}, %% Default with round_robin_routing
+    {batch_enable, true} %% Default is true 
+     %% The time duration (milliseconds) within which the messages sent will be batched.
+    {batch_max_delay_ms, 100}, %% Default is 10 
+     %% Maximum number of messages that can be in a batch
+    {batch_max_messages, 100}, %% Default is 1000
+     %% Max size of the queue of requests waiting for acknowledgement. 
+    {max_pending_requests, 50000}, %% Default is 100000
+  ],
+
+  {ok, Pid1} = pulserl:start_producer("topic-name"), %% Will use default option values
+  {ok, Pid2} = pulserl:start_producer("persistent://public/default/topic-name", ProducerOpts),
+
+```
+
+#### Producing a messages
+
 ...
 
 ## Contribute 

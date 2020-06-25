@@ -35,6 +35,7 @@
 -define(ERROR_PRODUCER_DOWN, {error, producer_down}).
 -define(ERROR_PRODUCER_CLOSED, {error, producer_closed}).
 -define(ERROR_PRODUCER_NOT_READY, {error, producer_not_ready}).
+-define(ERROR_PRODUCER_QUEUE_IS_FULL, {error, producer_queue_full}).
 
 -define(SINGLE_ROUTING, single_routing).
 -define(ROUND_ROBIN_ROUTING, round_robin_routing).
@@ -185,8 +186,8 @@ start_link(#topic{} = Topic, Options) ->
   producer_id :: integer(),
   %% start of producer options
   producer_name :: string(),
-  producer_properties = [] :: list(),
-  producer_send_timeout :: integer(), %% [0, ...], 0 means no timeout and retry forever
+  producer_properties = [] :: list() | #{},
+  send_timeout :: integer(), %% [0, ...], 0 means no timeout and retry forever
   producer_initial_sequence_id :: integer(),
   %% end of producer options
   topic :: #topic{},
@@ -206,8 +207,8 @@ start_link(#topic{} = Topic, Options) ->
   batch_enable :: boolean(),
   max_batched_messages :: integer(),
   batch_max_delay_ms :: integer(),
-  max_pending_messages :: integer(),
-  max_pending_messages_across_partitions :: integer(),
+  max_pending_requests :: integer(),
+  max_pending_requests_across_partitions :: integer(),
   block_on_full_queue :: boolean(),
   send_timeout_timer :: reference(),
   metrics = #metrics{} :: #metrics{}
@@ -222,19 +223,18 @@ init([#topic{} = Topic, Opts]) ->
     options = Opts,
     producer_name = proplists:get_value(name, ProducerOpts),
     producer_properties = proplists:get_value(properties, ProducerOpts, []),
-    producer_send_timeout = proplists:get_value(send_timeout, ProducerOpts, 30000),
-    producer_initial_sequence_id = proplists:get_value(initial_sequence_id, ProducerOpts, 0),
+    producer_initial_sequence_id = proplists:get_value(initial_sequence_id, ProducerOpts, -1) + 1,
     partition_routing_mode = proplists:get_value(routing_mode, Opts, ?ROUND_ROBIN_ROUTING),
     batch_enable = proplists:get_value(batch_enable, Opts, true),
+    send_timeout = proplists:get_value(send_timeout, ProducerOpts, 30000),
     batch_max_delay_ms = proplists:get_value(batch_max_delay_ms, Opts, 10),
     max_batched_messages = proplists:get_value(batch_max_messages, Opts, 1000),
-    max_pending_messages = proplists:get_value(max_pending_messages, Opts, 1000),
-    max_pending_messages_across_partitions = proplists:get_value(
-      max_pending_messages_across_partitions, Opts, 50000)
+    max_pending_requests = proplists:get_value(max_pending_requests, Opts, 50000),
+    max_pending_requests_across_partitions = proplists:get_value(
+      max_pending_requests_across_partitions, Opts, 100000)
   },
-  {InitSeqId, SeqId} = case State#state.producer_initial_sequence_id of 0 -> {0, 0}; I ->
-    {I, I + 1} end,
-  case initialize(State#state{producer_initial_sequence_id = InitSeqId, sequence_id = SeqId}) of
+  case initialize(State#state{
+    sequence_id = State#state.producer_initial_sequence_id}) of
     {error, Reason} ->
       {stop, Reason};
     NewState ->
@@ -261,7 +261,15 @@ handle_call({send_message, _ClientFrom, #prodMessage{key = Key}}, _From,
   {reply, Replay, State3};
 
 %% The child/no-child-producer
-handle_call({send_message, ClientFrom, Message}, _From, State) ->
+handle_call({send_message, ClientFrom, Message}, _From,
+    #state{pending_requests = PendingReqs, max_pending_requests = MaxPendingReqs} = State) ->
+  case queue:len(PendingReqs) < MaxPendingReqs of
+    true ->
+      {Reply, State2} = send_message(Message, ClientFrom, State),
+      {reply, Reply, increment_sent_metric(State2, 1)};
+    _ ->
+      {reply, ?ERROR_PRODUCER_QUEUE_IS_FULL, State}
+  end,
   {Reply, State2} = send_message(Message, ClientFrom, State),
   {reply, Reply, increment_sent_metric(State2, 1)};
 handle_call(Request, _From, State) ->
@@ -364,7 +372,7 @@ code_change(_OldVsn, State, _Extra) ->
 %%%===================================================================
 
 handle_ack_timer_timeout(#state{
-  producer_send_timeout = SendTimeout,
+  send_timeout = SendTimeout,
   pending_requests = PendingRequests} = State) ->
   case queue:out(PendingRequests) of
     {empty, _} ->
@@ -383,7 +391,7 @@ send_reply_to_waiter(SequenceId, Reply,
     #state{seqId2waiters = SeqId2Waiters} = State) ->
   case maps:get(SequenceId, SeqId2Waiters, ?UNDEF) of
     ?UNDEF ->
-      if State#state.producer_send_timeout > 0 ->
+      if State#state.send_timeout > 0 ->
         error_logger:warning_msg("Received a command receipt for in "
         "producer: ~p but couldn't see any waiter for it; sequence-id = ~p.",
           [self(), SequenceId]);
@@ -602,8 +610,8 @@ send_replies_to_waiters(Reply, Waiters, State) ->
 
 add_request_to_batch(Request, #state{
   batching_requests = BatchingRequests,
-  max_pending_messages = MaxPendingMessages,
-  max_pending_messages_across_partitions = MaxPendingPartitionedMessages
+  max_pending_requests = MaxPendingMessages,
+  max_pending_requests_across_partitions = MaxPendingPartitionedMessages
 } = State) ->
   RequestQueueLen = queue:len(BatchingRequests),
   case (RequestQueueLen < MaxPendingMessages)
@@ -719,7 +727,7 @@ initialize_self(#state{topic = Topic} = State) ->
           case establish_producer(State#state{
             connection = Pid, producer_id = Id
           }) of
-            #state{producer_send_timeout = SendTimeout} = State2 ->
+            #state{send_timeout = SendTimeout} = State2 ->
               State3 = start_ack_timeout_timer(State2, SendTimeout),
               start_send_batch_timer(State3);
             {error, _} = Error ->
@@ -781,10 +789,10 @@ establish_producer(#state{topic = Topic} = State) ->
       }
   end.
 
-start_ack_timeout_timer(#state{producer_send_timeout = 0} = State, _Delay) ->
+start_ack_timeout_timer(#state{send_timeout = 0} = State, _Delay) ->
   State;
 start_ack_timeout_timer(State, Delay) ->
-  Delay2 = erlang:min(Delay, State#state.producer_send_timeout),
+  Delay2 = erlang:min(Delay, State#state.send_timeout),
   State#state{
     send_timeout_timer = erlang:send_after(Delay2, self(), ?INFO_ACK_TIMEOUT)
   }.
@@ -890,9 +898,9 @@ validate_options(Options) when is_list(Options) ->
         erlwater_assertions:is_positive_int(Opt);
       ({batch_max_delay_ms, _V} = Opt) ->
         erlwater_assertions:is_positive_int(Opt);
-      ({max_pending_messages, _V} = Opt) ->
+      ({max_pending_requests, _V} = Opt) ->
         erlwater_assertions:is_positive_int(Opt);
-      ({max_pending_messages_across_partitions, _V} = Opt) ->
+      ({max_pending_requests_across_partitions, _V} = Opt) ->
         erlwater_assertions:is_positive_int(Opt);
       (Opt) ->
         error(unknown_producer_options, [Opt])
