@@ -200,12 +200,12 @@ A sample start producer API code:
      %% The time duration in milliseconds after which if the broker does not
      %% acknowledge an error will be reported. The default is 30000
     {send_timeout, 20000},
-     %% This logic is applied when the caller is not setting a key on a message. 
-     %% If the key is set with, then the hash of the key will be used to choose
-     %% which of the partition the message will be published to.
+     %% This behaviour is applied when a message without a key is to be published. 
+     %% If the key is set, then the hash of the key will be used to choose
+     %% which partition the message will be published to.
      %% Possible values: round_robin_routing, single_routing
      %% and {Module, Function} which will be called with the key and
-     %%.partition count to return the selected partition.
+     %% partition count to return the selected partition.
     {routing_mode, round_robin_routing}, %% Default with round_robin_routing
     {batch_enable, true} %% Default is true 
      %% The time duration (milliseconds) within which the messages sent will be batched.
