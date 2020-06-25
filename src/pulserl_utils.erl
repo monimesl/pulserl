@@ -46,7 +46,7 @@ new_message_id(Topic, #'MessageIdData'{
   }.
 
 new_message(Topic, MessageId, #'MessageMetadata'{} = Meta, Value, RedeliveryCount) ->
-  #message{
+  #consMessage{
     id = MessageId,
     key = Meta#'MessageMetadata'.partition_key,
     value = Value,
@@ -59,13 +59,13 @@ new_message(Topic, MessageId, #'MessageMetadata'{} = Meta, Value, RedeliveryCoun
 
 new_message(Topic, MessageId, #'MessageMetadata'{} = Meta, #'SingleMessageMetadata'{} = SingleMeta, Value, RedeliveryCount) ->
   Message = new_message(Topic, MessageId, Meta, Value, RedeliveryCount),
-  Metadata = Message#message.metadata,
+  Metadata = Message#consMessage.metadata,
   Message2 =
     case SingleMeta#'SingleMessageMetadata'.partition_key of
       ?UNDEF ->
         Message;
       PartitionKey ->
-        Message#message{key = PartitionKey}
+        Message#consMessage{key = PartitionKey}
     end,
   Metadata2 =
     case SingleMeta#'SingleMessageMetadata'.event_time of
@@ -74,7 +74,7 @@ new_message(Topic, MessageId, #'MessageMetadata'{} = Meta, #'SingleMessageMetada
       EventTime ->
         Metadata#messageMeta{event_time = EventTime}
     end,
-  Message2#message{metadata = Metadata2}.
+  Message2#consMessage{metadata = Metadata2}.
 
 
 hash_key(?UNDEF, Divisor) ->

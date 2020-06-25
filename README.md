@@ -87,7 +87,7 @@ In the Erlang shell
 In your Erlang project's `rebar.config` 
  ```erlang
 {deps, [
-   {pulserl, "0.1.0"}
+   {pulserl, "<latest-version>"}
 ]}
 ```
 
@@ -95,7 +95,7 @@ In your Elixir project's `mix.exs`
  ```elixir
 def deps do
   [
-    {:pulserl, "~> 0.1.0"}
+    {:pulserl, "~> <latest-version>"}
   ]
 end
 ```
@@ -117,7 +117,7 @@ end
 ```erlang
 [
   {pulserl, [
-    {autostart, true} %% If false, the client will created on startup. Default is true.
+    {autostart, true} %% If false, the client will be created on startup. Default is true.
     %% The TCP connect timeout in milliseconds. Default is 30000.
     , {connect_timeout_ms, 30000}
     %% The maximum connections to each broker the client should create.
@@ -128,7 +128,7 @@ end
     , {socket_options, [{nodelay, true}]}
     %% The service url. Default is the non TLS url: "pulsar://${hostname}:6650"
     , {service_url, "pulsar+ssl://localhost:6651/"}
-    %% The trust certificate file path. Required on if the TLS service url is used.
+    %% The trust certificate file path. Required only if the TLS service url is used.
     %% See http://pulsar.apache.org/docs/en/security-tls-transport/
     , {tls_trust_certs_file, "/path/to/cacert.pem"}
   ]}
@@ -148,8 +148,33 @@ end
 ```  
 
 ### Producer 
-...
+Pulserl creates a `gen_server` process per topic. For a topic of `n` partition, it creates
+a parent producer under the `pulserl_producer_sup` tree which in turn `start_link` and 
+manage `n` child producers. The parent producer serves as a facade to the internal producers.
+The parent monitor the child processes (internal partitioned producers) for resilience, 
+route client calls to one of the child processes using different routing modes. 
+A producer during initialization is assigned a connection by the client based on its topic metadata.
+The producers uses a queueing mechanism on message sending. 
+Each send is internally a `gen_server.call/2` to the producer process. The caller is added to 
+a queue and replied immediately with `ok.` This initial early reply frees up the caller to do 
+other tasks if the response is not need immediately. Internally if message send is trigger, i.e
+when batching is not enable or batching enabled but a batch send is triggered, the producer
+asynchronously send (`gen_sever.cast/2`) the message(s) to the `pulserl_conn` process. When the
+connection process receives the response it will `!` send it to associated the producer which in 
+turn dequeue the associated caller and reply to it.
+The producer provides synchronous and asynchronous send API.
 
+
+In synchronous mode, the call will wait for the broker to acknowledge the message. 
+If the acknowledgment is not received and a `send_timeout` is specified, a `{error, send_timeout}`
+is sent to client on timed out. 
+
+The asynchronous mode provides two API. One uses a `promise` that will be used to probe 
+for a response or error. The other uses callback `fun/1` that will be invoke internally 
+by the producer process when there is a response or error.
+
+#### Starting a producer
+...
 
 ## Contribute 
 

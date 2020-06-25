@@ -20,7 +20,11 @@
 has_messages_in_batch(#'MessageMetadata'{num_messages_in_batch = NumOfBatchMessages}) ->
   is_number(NumOfBatchMessages).
 
-to_con_prod_metadata(Ls) ->
+to_con_prod_metadata(?UNDEF) ->
+  ?UNDEF;
+to_con_prod_metadata(Map) when is_map(Map) ->
+  to_con_prod_metadata(maps:to_list(Map));
+to_con_prod_metadata(Ls) when is_list(Ls) ->
   lists:map(
     fun({Key, Value}) ->
       #'KeyValue'{key = erlwater:to_binary(Key), value = erlwater:to_binary(Value)};

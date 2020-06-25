@@ -17,10 +17,7 @@
 -export([start_link/2]).
 %% Consumer API
 -export([create/2, close/1, close/2]).
--export([seek/2]).
--export([receive_message/1]).
--export([ack/2, ack/3]).
--export([nack/2, redeliver_unack_messages/1]).
+-export([ack/3, negative_ack/2, seek/2, receive_message/1, redeliver_unack_messages/1]).
 
 %% gen_server callbacks
 -export([init/1,
@@ -64,22 +61,10 @@ receive_message(Pid) ->
       Other
   end.
 
-ack(Pid, #'message'{id = MessageId}) ->
-  ack(Pid, MessageId, false);
-
-ack(Pid, #'messageId'{} = MessageId) ->
-  ack(Pid, MessageId, false).
-
-ack(Pid, #'message'{id = MessageId}, Cumulative) ->
-  ack(Pid, MessageId, Cumulative);
-
-ack(Pid, #'messageId'{} = MessageId, Cumulative) ->
+ack(Pid, #'messageId'{} = MessageId, Cumulative) when is_pid(Pid) ->
   call_associated_consumer(Pid, {acknowledge, MessageId, Cumulative}).
 
-nack(Pid, #'message'{id = MessageId}) ->
-  nack(Pid, MessageId);
-
-nack(Pid, #messageId{} = MessageId) ->
+negative_ack(Pid, #messageId{} = MessageId) ->
   call_associated_consumer(Pid, {negative_acknowledge, MessageId}).
 
 redeliver_unack_messages(Pid) ->
@@ -102,12 +87,14 @@ call_associated_consumer(Pid, Request) ->
       Other
   end.
 
-create(TopicName, Options) when is_list(TopicName) ->
-  create(topic_utils:parse(TopicName), Options);
-
 create(#topic{} = Topic, Options) ->
-  Options2 = validate_options(Options),
-  supervisor:start_child(pulserl_consumer_sup, [Topic, Options2]).
+  case whereis(pulserl_client) of
+    ?UNDEF ->
+      ?ERROR_CLIENT_NOT_STARTED;
+    _ ->
+      Options2 = validate_options(Options),
+      supervisor:start_child(pulserl_consumer_sup, [Topic, Options2])
+  end.
 
 start_link(#topic{} = Topic, Options) ->
   gen_server:start_link(?MODULE, [Topic, Options], []).
@@ -408,7 +395,7 @@ handle_info({new_message, MsgId, RedeliveryCount, HeadersAndPayload},
                 }
               end,
               {[], LastBatchIndex}, SingleMetaAndPayloads),
-            [{_, #message{id = IdOfFirstMessage}} | _] = SingleMetaAndMessages,
+            [{_, #consMessage{id = IdOfFirstMessage}} | _] = SingleMetaAndMessages,
             NewTrackerKey = message_id_2_batch_ack_tracker_key(IdOfFirstMessage),
             BatchTracker = sets:from_list(lists:seq(0, LastBatchIndex)),
             NewBatchAckTrackers = maps:put(NewTrackerKey, BatchTracker, State#state.batch_ack_trackers),
@@ -692,7 +679,7 @@ handle_receive_message(#state{incoming_messages = MessageQueue} = State) ->
   case queue:out(MessageQueue) of
     {{value, Message}, MessageQueue2} ->
       State2 = increase_flow_permits(State#state{incoming_messages = MessageQueue2}, 1),
-      {Message, track_message(Message#message.id, State2)};
+      {Message#consMessage{consumer = self()}, track_message(Message#consMessage.id, State2)};
     {empty, _} ->
       {false, State}
   end.
@@ -709,7 +696,7 @@ handle_messages(MetadataAndMessages, State) ->
 
 %% @Todo Handle `compacted_out` messages
 add_to_received_message_queue({_, Message}, MessageQueue, State) ->
-  #'messageMeta'{redelivery_count = RedeliveryCount} = Message#'message'.metadata,
+  #'messageMeta'{redelivery_count = RedeliveryCount} = Message#consMessage.metadata,
   MaxRedeliveryCount = State#state.dead_letter_topic_max_redeliver_count,
   if MaxRedeliveryCount > 0 andalso RedeliveryCount >= MaxRedeliveryCount ->
     MessageQueue;
@@ -720,7 +707,7 @@ add_to_received_message_queue({_, Message}, MessageQueue, State) ->
 %% Dead Letter Policy not enable
 add_to_dead_letter_message_map(_MetadataAndMessage, ?UNDEF, _State) ->
   ?UNDEF;
-add_to_dead_letter_message_map({_, #'message'{id = MsgId, metadata = #'messageMeta'{
+add_to_dead_letter_message_map({_, #consMessage{id = MsgId, metadata = #'messageMeta'{
   redelivery_count = RedeliveryCount}} = Msg}, DeadLetterMsgMap,
     State) ->
   if RedeliveryCount >= State#state.dead_letter_topic_max_redeliver_count ->
@@ -790,16 +777,16 @@ do_send_to_dead_letter_topic(Message,
 do_send_to_dead_letter_topic1(Message, State) ->
   DeadLetterTopic = State#state.dead_letter_topic_name,
   ProducerPid = State#state.dead_letter_topic_producer,
-  #message{id = MsgId, key = Key, value = Value, metadata = #messageMeta{properties = Props}} = Message,
+  #consMessage{id = MsgId, key = Key, value = Value, metadata = #messageMeta{properties = Props}} = Message,
   error_logger:warning_msg("Giving up processsing of message {legderId=~p, entryId=~p, redliveryCount=~p, topic=~s} "
   "by sending it to the dead letter topic=~s from consumer {topic=~s, subscription=~s, pid=~p}",
     [MsgId#messageId.ledger_id, MsgId#messageId.entry_id,
-      (Message#message.metadata)#messageMeta.redelivery_count,
+      (Message#consMessage.metadata)#messageMeta.redelivery_count,
       MsgId#messageId.topic,
       DeadLetterTopic, topic_utils:to_string(State#state.topic),
       State#state.consumer_subscription_name, self()]),
   ProdMessage = pulserl_producer:new_message(Key, Value, Props),
-  case pulserl_producer:sync_produce(ProducerPid, ProdMessage) of
+  case pulserl_producer:sync_send(ProducerPid, ProdMessage, 15000) of
     {error, Reason} = Result ->
       error_logger:error_msg("Error sending to dead letter topic=~s from consumer=[~s, ~p]. "
       "Reason: ~p", [DeadLetterTopic, topic_utils:to_string(State#state.topic), self(), Reason]),
@@ -814,7 +801,7 @@ ack_and_clean_dead_letter_message(_,
 ack_and_clean_dead_letter_message(_,
     #state{parent_consumer = ?UNDEF} = State) ->
   State;
-ack_and_clean_dead_letter_message(#message{id = MsgId}, State) ->
+ack_and_clean_dead_letter_message(#consMessage{id = MsgId}, State) ->
   State2 = untrack_message(MsgId, false, State),
   State3 = remove_from_batch_tracker(MsgId, State2),
   do_send_ack_now(MsgId, false, State3).

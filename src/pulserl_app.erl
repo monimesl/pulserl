@@ -13,6 +13,7 @@
 
 %% Application callbacks
 -export([start/2, stop/1]).
+-export([def_consumer_options/0, def_producer_options/0]).
 
 %%%===================================================================
 %%% Application callbacks
@@ -71,6 +72,12 @@ start(_StartType, _StartArgs) ->
 -spec(stop(State :: term()) -> term()).
 stop(_State) ->
   ok.
+
+def_producer_options() ->
+  pulserl_utils:get_env(producer_opts, []).
+
+def_consumer_options() ->
+  pulserl_utils:get_env(consumer_opts, []).
 
 %%%===================================================================
 %%% Internal functions

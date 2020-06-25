@@ -13,7 +13,7 @@
 
 %% API
 -export([start_link/0]).
--export([singleton_consumer/2, singleton_producer/2]).
+-export([get_consumer/2, get_producer/2]).
 
 
 %% gen_server callbacks
@@ -26,24 +26,24 @@
 
 -define(SERVER, ?MODULE).
 
-singleton_consumer(TopicName, Options) ->
+get_consumer(TopicName, Options) ->
   Topic = topic_utils:parse(TopicName),
   case ets:lookup(pulserl_consumers, topic_utils:to_string(Topic)) of
     [] ->
       gen_server:call(?SERVER, {new_consumer, Topic, Options}, 32000);
-    Prods ->
-      {_, Pid} = erlwater_collection:random_select(Prods),
+    Producers ->
+      {_, Pid} = erlwater_collection:random_select(Producers),
       {ok, Pid}
   end.
 
 
-singleton_producer(TopicName, Options) ->
+get_producer(TopicName, Options) ->
   Topic = topic_utils:parse(TopicName),
   case ets:lookup(pulserl_producers, topic_utils:to_string(Topic)) of
     [] ->
       gen_server:call(?SERVER, {new_producer, Topic, Options}, 32000);
-    Prods ->
-      {_, Pid} = erlwater_collection:random_select(Prods),
+    Consumers ->
+      {_, Pid} = erlwater_collection:random_select(Consumers),
       {ok, Pid}
   end.
 
@@ -59,9 +59,9 @@ init([]) ->
 handle_call({new_consumer, Topic, Options}, _From, State) ->
   case ets:lookup(pulserl_consumers, topic_utils:to_string(Topic)) of
     [] ->
-      Reply = pulserl_consumer:create(Topic, Options),
+      Reply = pulserl:start_consumer(Topic, Options),
       case Reply of
-        {ok, _Pid} ->
+        {ok, _Pid} = Res ->
           %% If the broker has some unAck/unsent messages
           %% and the consumer is created for the first time via
           %% pulserl:consumer/1, sometimes the call returns without
@@ -70,9 +70,10 @@ handle_call({new_consumer, Topic, Options}, _From, State) ->
           %% load is asynchronous. Sleeping here a bit, will increases
           %% the chances of having the message(s) arrived before we return
           %% the consumer pid to the client. This is just a hack
-          timer:sleep(300);
-        _ ->
-          ok
+          timer:sleep(300),
+          Res;
+        Other ->
+          Other
       end,
       {reply, Reply, State};
     Prods ->
@@ -83,7 +84,7 @@ handle_call({new_consumer, Topic, Options}, _From, State) ->
 handle_call({new_producer, Topic, Options}, _From, State) ->
   case ets:lookup(pulserl_producers, topic_utils:to_string(Topic)) of
     [] ->
-      {reply, pulserl_producer:create(Topic, Options), State};
+      {reply, pulserl:start_producer(Topic, Options), State};
     Prods ->
       {_, Pid} = erlwater_collection:random_select(Prods),
       {reply, {ok, Pid}, State}

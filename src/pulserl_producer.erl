@@ -24,7 +24,7 @@
 
 %% Producer API
 -export([create/2, close/1, close/2]).
--export([produce/2, produce/3, sync_produce/2, sync_produce/3, new_message/1, new_message/2, new_message/3, new_message/4, new_message/5]).
+-export([send/3, sync_send/3, new_message/1, new_message/2, new_message/3, new_message/4, new_message/5]).
 
 -define(STATE_READY, ready).
 -define(CALL_TIMEOUT, 300000).
@@ -36,20 +36,57 @@
 -define(ERROR_PRODUCER_CLOSED, {error, producer_closed}).
 -define(ERROR_PRODUCER_NOT_READY, {error, producer_not_ready}).
 
-%%--------------------------------------------------------------------
-%% @doc
-
-%% @end
-%%--------------------------------------------------------------------
-produce(Pid, #prodMessage{} = Message) ->
-  produce(Pid, Message, ?UNDEF).
+-define(SINGLE_ROUTING, single_routing).
+-define(ROUND_ROBIN_ROUTING, round_robin_routing).
 
 %%--------------------------------------------------------------------
-%% @doc
-
-%% @end
+%% @doc Creates a new message to produce
 %%--------------------------------------------------------------------
-produce(Pid, #prodMessage{} = Message, Callback) ->
+new_message(Value) ->
+  new_message(?UNDEF, Value).
+
+%%--------------------------------------------------------------------
+%% @doc Creates a new message to produce
+%%--------------------------------------------------------------------
+new_message(Key, Value) ->
+  new_message(Key, Value, ?UNDEF).
+
+%%--------------------------------------------------------------------
+%% @doc Creates a new message to produce
+%%--------------------------------------------------------------------
+new_message(Key, Value, Properties) ->
+  new_message(Key, Value, Properties, erlwater_time:milliseconds()).
+
+%%--------------------------------------------------------------------
+%% @doc Creates a new message to produce
+%%--------------------------------------------------------------------
+new_message(Key, Value, Properties, EventTime) ->
+  new_message(Key, Value, Properties, EventTime, ?UNDEF).
+
+%%--------------------------------------------------------------------
+%% @doc Creates a new message to produce
+%%--------------------------------------------------------------------
+-spec(new_message(
+    Key :: key() | undefined,
+    Value :: value(),
+    Properties :: properties(),
+    EventTime :: integer() | undefined,
+    DeliverAtTime :: integer() | undefined) ->
+  ok | reference()).
+new_message(Key, Value, Properties, EventTime, DeliverAtTime) ->
+  #prodMessage{
+    key = case Key of ?UNDEF -> ?UNDEF; _ -> erlwater:to_binary(Key) end,
+    value = erlwater:to_binary(Value),
+    event_time = erlwater:to_integer(EventTime),
+    deliverAtTime = DeliverAtTime,
+    properties = Properties
+  }.
+
+
+%%--------------------------------------------------------------------
+%% @doc Send a message asynchronously
+%%--------------------------------------------------------------------
+send(Pid, #prodMessage{} = Message, Callback) when is_pid(Pid) ->
   {CallerFun, CallReturn} =
     if is_function(Callback) ->
       {fun() -> gen_server:call(Pid, {send_message, Callback, Message}, ?CALL_TIMEOUT) end, ok};
@@ -65,7 +102,7 @@ produce(Pid, #prodMessage{} = Message, Callback) ->
       {error, _} = Error ->
         Error;
       {redirect, ChildProducerPid} ->
-        produce(ChildProducerPid, Message, Callback)
+        send(ChildProducerPid, Message, Callback)
     end
   catch
     _:{timeout, _} ->
@@ -75,23 +112,19 @@ produce(Pid, #prodMessage{} = Message, Callback) ->
   end.
 
 %%--------------------------------------------------------------------
-%% @doc
-
-%% @end
+%% @doc Send a message synchronously
 %%--------------------------------------------------------------------
-sync_produce(Pid, #prodMessage{} = Message) ->
-  sync_produce(Pid, Message, ?UNDEF).
-
-sync_produce(Pid, #prodMessage{} = Message, ?UNDEF) ->
-  sync_produce(Pid, Message, ?CALL_TIMEOUT);
-
-sync_produce(Pid, #prodMessage{} = Message, Timeout) when is_integer(Timeout) ->
+-spec(sync_send(Pid :: pid(), Message :: #prodMessage{}, Timeout :: pos_integer()) ->
+  #messageId{} | {error, Reason :: term()}).
+sync_send(Pid, #prodMessage{} = Message, Timeout) when is_pid(Pid)
+  andalso (is_integer(Timeout) orelse Timeout == ?UNDEF) ->
   ClientRef = erlang:make_ref(),
   MonitorRef = erlang:monitor(process, Pid),
-  case gen_server:call(Pid, {send_message, {self(), ClientRef}, Message}, Timeout + 2000) of
+  Timeout2 = case Timeout of ?UNDEF -> ?CALL_TIMEOUT; T -> T end,
+  case gen_server:call(Pid, {send_message, {self(), ClientRef}, Message}, Timeout2 + 2000) of
     {redirect, ChildProducerPid} ->
       erlang:demonitor(MonitorRef, [flush]),
-      sync_produce(ChildProducerPid, Message, Timeout);
+      sync_send(ChildProducerPid, Message, Timeout2);
     ok ->
       receive
         {ClientRef, Reply} ->
@@ -99,7 +132,7 @@ sync_produce(Pid, #prodMessage{} = Message, Timeout) when is_integer(Timeout) ->
           Reply;
         {'DOWN', MonitorRef, process, _Pid, _Reason} ->
           ?ERROR_PRODUCER_DOWN
-      after Timeout ->
+      after Timeout2 ->
         erlang:demonitor(MonitorRef, [flush]),
         {error, {timeout, ClientRef}}
       end;
@@ -107,62 +140,14 @@ sync_produce(Pid, #prodMessage{} = Message, Timeout) when is_integer(Timeout) ->
       Other
   end.
 
-%%--------------------------------------------------------------------
-%% @doc
-
-%% @end
-%%--------------------------------------------------------------------
-new_message(Value) ->
-  new_message(<<>>, Value).
-
-%%--------------------------------------------------------------------
-%% @doc
-
-%% @end
-%%--------------------------------------------------------------------
-new_message(Key, Value) ->
-  new_message(Key, Value, []).
-
-%%--------------------------------------------------------------------
-%% @doc
-
-%% @end
-%%--------------------------------------------------------------------
-new_message(Key, Value, Properties) ->
-  new_message(Key, Value, Properties, erlwater_time:milliseconds()).
-
-%%--------------------------------------------------------------------
-%% @doc
-
-%% @end
-%%--------------------------------------------------------------------
-new_message(Key, Value, Properties, EventTime) ->
-  new_message(Key, Value, Properties, EventTime, ?UNDEF).
-
-new_message(Key, Value, Properties, EventTime, DeliverAtTime) ->
-  Key2 = case Key of ?UNDEF -> <<>>; _ -> Key end,
-  #prodMessage{
-    key = erlwater:to_binary(Key2),
-    value = erlwater:to_binary(Value),
-    event_time = erlwater:to_integer(EventTime),
-    deliverAtTime = DeliverAtTime,
-    properties = Properties
-  }.
-
-%%--------------------------------------------------------------------
-%% @doc
-
-%% @end
-%%--------------------------------------------------------------------
-create(Topic, Options) when is_list(Topic) ->
-  create(list_to_binary(Topic), Options);
-
-create(Topic, Options) when is_binary(Topic) ->
-  create(topic_utils:parse(Topic), Options);
-
 create(#topic{} = Topic, Options) ->
-  Options2 = validate_options(Options),
-  supervisor:start_child(pulserl_producer_sup, [Topic, Options2]).
+  case whereis(pulserl_client) of
+    ?UNDEF ->
+      ?ERROR_CLIENT_NOT_STARTED;
+    _ ->
+      Options2 = validate_options(Options),
+      supervisor:start_child(pulserl_producer_sup, [Topic, Options2])
+  end.
 
 
 %%--------------------------------------------------------------------
@@ -205,14 +190,16 @@ start_link(#topic{} = Topic, Options) ->
   producer_initial_sequence_id :: integer(),
   %% end of producer options
   topic :: #topic{},
+  sequence_id :: integer(),
   partition_count = 0 :: non_neg_integer(),
   partition_to_child = dict:new(),
   child_to_partition = dict:new(),
+  partition_routing_mode :: atom() | {atom(), atom()},
+  partition_to_route_to :: non_neg_integer(),
   batching_requests = queue:new(),
   pending_requests = queue:new(),
   seqId2waiters = #{} :: #{},
   batch_send_timer,
-  sequence_id :: integer(),
   re_init_timer,
   %%Config
   options :: list(),
@@ -237,11 +224,11 @@ init([#topic{} = Topic, Opts]) ->
     producer_properties = proplists:get_value(properties, ProducerOpts, []),
     producer_send_timeout = proplists:get_value(send_timeout, ProducerOpts, 30000),
     producer_initial_sequence_id = proplists:get_value(initial_sequence_id, ProducerOpts, 0),
+    partition_routing_mode = proplists:get_value(routing_mode, Opts, ?ROUND_ROBIN_ROUTING),
     batch_enable = proplists:get_value(batch_enable, Opts, true),
     batch_max_delay_ms = proplists:get_value(batch_max_delay_ms, Opts, 10),
     max_batched_messages = proplists:get_value(batch_max_messages, Opts, 1000),
     max_pending_messages = proplists:get_value(max_pending_messages, Opts, 1000),
-    block_on_full_queue = proplists:get_value(block_on_full_queue, Opts, false),
     max_pending_messages_across_partitions = proplists:get_value(
       max_pending_messages_across_partitions, Opts, 50000)
   },
@@ -264,12 +251,14 @@ handle_call({send_message, _ClientFrom, #prodMessage{key = Key}}, _From,
   %% This producer is the partition parent.
   %% We choose the child producer and redirect
   %% the client to it.
-  Replay =
+  {Replay, State3} =
     case choose_partition_producer(Key, State) of
-      {ok, Pid} -> {redirect, Pid};
-      _ -> ?ERROR_PRODUCER_NOT_READY
+      {{ok, Pid}, State2} ->
+        {{redirect, Pid}, State2};
+      {_, State2} ->
+        {?ERROR_PRODUCER_NOT_READY, State2}
     end,
-  {reply, Replay, State};
+  {reply, Replay, State3};
 
 %% The child/no-child-producer
 handle_call({send_message, ClientFrom, Message}, _From, State) ->
@@ -350,7 +339,7 @@ handle_info({'EXIT', Pid, Reason}, State) ->
   case Reason of
     normal -> {noreply, State};
     _ ->
-      case maybe_inner_producer_exited(Pid, Reason, State) of
+      case maybe_child_producer_exited(Pid, Reason, State) of
         {error, Reason} ->
           {stop, Reason, State};
         #state{} = NewState ->
@@ -409,9 +398,46 @@ send_reply_to_waiter(SequenceId, Reply,
   end.
 
 
-choose_partition_producer(Key, State) ->
-  Partition = pulserl_utils:hash_key(Key, State#state.partition_count),
-  dict:find(Partition, State#state.partition_to_child).
+choose_partition_producer(Key,
+    #state{partition_count = PartitionCount} = State) ->
+  {Partition, State2} =
+    case State#state.partition_routing_mode of
+      {M, F} ->
+        Int = erlang:apply(M, F, [Key, PartitionCount]),
+        if (is_integer(Int) andalso Int >= 0 andalso Int < PartitionCount) ->
+          {Int, State};
+          true ->
+            error_logger:error_msg("The custom router mode: ~p produces invalid valid: ~p. "
+            "It mut return an integer in the range: [0, ~p)", [{M, F}, PartitionCount]),
+            {rand:uniform(PartitionCount) - 1, State}
+        end;
+      Mode ->
+        if is_binary(Key) ->
+          {pulserl_utils:hash_key(Key, PartitionCount), State};
+          true ->
+            Part = State#state.partition_to_route_to,
+            case Mode of
+              ?SINGLE_ROUTING ->
+                case Part of
+                  ?UNDEF ->
+                    Part2 = rand:uniform(PartitionCount) - 1,
+                    {Part2, State#state{partition_to_route_to = Part2}};
+                  _ ->
+                    {Part, State}
+                end;
+              _ ->
+                %% Round robin
+                case Part of
+                  ?UNDEF ->
+                    {0, State#state{partition_to_route_to = 0}};
+                  _ ->
+                    Next = (Part + 1) rem PartitionCount,
+                    {Part, State#state{partition_to_route_to = Next}}
+                end
+            end
+        end
+    end,
+  {dict:find(Partition, State2#state.partition_to_child), State2}.
 
 
 send_message(Message, From, State) ->
@@ -524,8 +550,8 @@ send_batch_messages(RequestsToBatch, #state{
           sequence_id = SeqId0,
           payload_size = byte_size(Payload),
           partition_key = Msg#prodMessage.key,
-          properties = Msg#prodMessage.properties,
-          event_time = Msg#prodMessage.event_time
+          event_time = Msg#prodMessage.event_time,
+          properties = commands:to_con_prod_metadata(Msg#prodMessage.properties)
         },
       SerializedSingleMsgMeta = pulsar_api:encode_msg(SingleMsgMeta),
       SerializedSingleMsgMetaSize = byte_size(SerializedSingleMsgMeta),
@@ -621,7 +647,7 @@ update_pending_count_across_partitions(
   end.
 
 
-maybe_inner_producer_exited(ExitedPid, Reason, State) ->
+maybe_child_producer_exited(ExitedPid, Reason, State) ->
   case dict:find(ExitedPid, State#state.child_to_partition) of
     {ok, Partition} ->
       error_logger:warning_msg("Producer(~p) to '~s' exited abnormally due to reason."
@@ -847,6 +873,17 @@ validate_options(Options) when is_list(Options) ->
         erlwater_assertions:is_non_negative_int(Opt);
       ({batch_enable, _} = Opt) ->
         erlwater_assertions:is_boolean(Opt);
+      ({routing_mode, Val} = Opt) ->
+        case Val of
+          ?SINGLE_ROUTING ->
+            Opt;
+          ?ROUND_ROBIN_ROUTING ->
+            Opt;
+          {M, F} when is_atom(M) andalso is_atom(F) ->
+            Opt;
+          _ ->
+            error(invalid_option, [Val])
+        end;
       ({block_on_full_queue, _V} = Opt) ->
         erlwater_assertions:is_boolean(Opt);
       ({batch_max_messages, _V} = Opt) ->

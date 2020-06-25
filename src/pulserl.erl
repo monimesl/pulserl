@@ -9,136 +9,192 @@
 -module(pulserl).
 
 -include("pulserl.hrl").
+
 %% API
 -export([await/1, await/2]).
 -export([start_client/1, start_client/2]).
--export([produce/2, produce/3, produce/4]).
--export([sync_produce/2, sync_produce/3]).
--export([consume/1, ack/1, ack_cumulative/1, nack/1]).
+-export([start_consumer/1, start_consumer/2]).
+-export([start_producer/1, start_producer/2]).
+-export([produce/2, produce/3, sync_produce/2, sync_produce/3]).
+-export([consume/1, ack/1, ack/2, ack_cumulative/1, ack_cumulative/2, negative_ack/1, negative_ack/2]).
+
+%% Expose for demo
 -export([start_consumption_in_background/1]).
 
 
-%%--------------------------------------------------------------------
-%% @doc
-%% @end
-%%--------------------------------------------------------------------
+%%--------------------------------------------------------------
+%% @doc Starts the pulserl client.
+%% -------------------------------------------------------------
 start_client(ServiceUrl) ->
   start_client(ServiceUrl, #clientConfig{}).
 
+%%--------------------------------------------------------------
+%% @doc Starts the pulserl client
+%% -------------------------------------------------------------
+-spec(start_client(ServiceUrl :: string() | binary()) -> ok | {error, term()}).
 start_client(ServiceUrl, ClientConfig) ->
   pulserl_client_sup:start_client(ServiceUrl, ClientConfig).
 
-%% %%--------------------------------------------------------------------
-%% @doc
-%% @end
-%%--------------------------------------------------------------------
-produce(PidOrTopic, #prodMessage{} = Msg) ->
-  produce(PidOrTopic, Msg, undefined);
+%%--------------------------------------------------------------
+%% @doc Starts a consumer using the specified topic
+%% and default options
+%% -------------------------------------------------------------
+start_consumer(Topic) ->
+  Options = pulserl_app:def_consumer_options(),
+  start_producer(Topic, Options).
+
+%%-----------------------------------------------------------------
+%% @doc Starts a consumer using the specified topic and options
+%% ----------------------------------------------------------------
+-spec(start_consumer(
+    Topic :: topic(),
+    Options :: producer_options()) -> {ok, pid()} | {error, term()}).
+start_consumer(Topic, Options) ->
+  Topic2 =
+    case Topic of
+      #topic{} -> Topic;
+      _ -> topic_utils:parse(Topic)
+    end,
+  pulserl_consumer:create(Topic2, Options).
+
+%%--------------------------------------------------------------
+%% @doc Starts a producer using the specified topic
+%% and default options
+%% -------------------------------------------------------------
+start_producer(Topic) ->
+  Options = pulserl_app:def_producer_options(),
+  start_producer(Topic, Options).
+
+%%-----------------------------------------------------------------
+%% @doc Starts a producer using the specified topic and options
+%% ----------------------------------------------------------------
+-spec(start_producer(
+    Topic :: topic(),
+    Options :: producer_options()) -> {ok, pid()} | {error, term()}).
+start_producer(Topic, Options) ->
+  Topic2 =
+    case Topic of
+      #topic{} -> Topic;
+      _ -> topic_utils:parse(Topic)
+    end,
+  pulserl_producer:create(Topic2, Options).
+
 
 %%--------------------------------------------------------------------
-%% @doc
-%% @end
+%% @doc publish a message asynchronously
 %%--------------------------------------------------------------------
-produce(PidOrTopic, Value) ->
-  produce(PidOrTopic, pulserl_producer:new_message(Value), undefined).
+produce(PidOrTopic, Value) when not is_record(Value, prodMessage) ->
+  produce(PidOrTopic, pulserl_producer:new_message(Value), undefined);
 
 %%--------------------------------------------------------------------
-%% @doc
-%% @end
+%% @doc publish a message asynchronously
 %%--------------------------------------------------------------------
-produce(PidOrTopic, #prodMessage{} = Msg, Callback) ->
+produce(PidOrTopic, Message) ->
+  produce(PidOrTopic, Message, undefined).
+
+%%--------------------------------------------------------------------
+%% @doc publish a message asynchronously
+%%--------------------------------------------------------------------
+produce(PidOrTopic, Value, Callback) when
+  (is_list(Value) or is_binary(Value)) andalso
+    (is_function(Callback) or Callback == ?UNDEF) ->
+  produce(PidOrTopic, pulserl_producer:new_message(Value), Callback);
+
+%%--------------------------------------------------------------------
+%% @doc publish a message asynchronously
+%%--------------------------------------------------------------------
+produce(PidOrTopic, Key, Value) when
+  (Key == ?UNDEF or is_list(Key) or is_binary(Key)) andalso
+    (is_list(Value) or is_binary(Value)) ->
+  produce(PidOrTopic, pulserl_producer:new_message(Key, Value), ?UNDEF);
+
+%%-------------------------------------------------------------------------------
+%% @doc publish a message asynchronously to the specified topic or producer
+%% If `PidOrTopic` is a topic, a registry lookup is done to fine an already existing
+%% producer created for the specified topic; if none is found, one is created and
+%% register for future calls
+%%-------------------------------------------------------------------------------
+produce(PidOrTopic, #prodMessage{} = Msg, Callback)
+  when is_function(Callback) orelse Callback == ?UNDEF ->
   if is_pid(PidOrTopic) ->
-    pulserl_producer:produce(PidOrTopic, Msg, Callback);
+    pulserl_producer:send(PidOrTopic, Msg, Callback);
     true ->
-      case pulserl_instance_registry:singleton_producer(PidOrTopic, []) of
+      case pulserl_instance_registry:get_producer(PidOrTopic, []) of
         {ok, Pid} -> produce(Pid, Msg, Callback);
         Other -> Other
       end
-  end;
+  end.
 
 %%--------------------------------------------------------------------
-%% @doc
-%% @end
+%% @doc publish a message synchronously
 %%--------------------------------------------------------------------
-produce(PidOrTopic, Value, Callback) when is_function(Callback) orelse Callback == ?UNDEF ->
-  produce(PidOrTopic, pulserl_producer:new_message(Value), Callback);
-
-produce(PidOrTopic, Key, Value) ->
-  produce(PidOrTopic, pulserl_producer:new_message(Key, Value), ?UNDEF).
-
-produce(PidOrTopic, Key, Value, Callback) ->
-  produce(PidOrTopic, pulserl_producer:new_message(Key, Value), Callback).
-
+sync_produce(PidOrTopic, Value) when is_list(Value) orelse is_binary(Value) ->
+  sync_produce(PidOrTopic, pulserl_producer:new_message(Value), ?UNDEF);
 
 %%--------------------------------------------------------------------
-%% @doc
-%% @end
+%% @doc publish a message synchronously
 %%--------------------------------------------------------------------
 sync_produce(Pid, #prodMessage{} = Msg) ->
-  sync_produce(Pid, Msg, undefined);
+  sync_produce(Pid, Msg, ?UNDEF).
 
 %%--------------------------------------------------------------------
-%% @doc
-%% @end
+%% @doc publish a message synchronously
 %%--------------------------------------------------------------------
-sync_produce(PidOrTopic, Value) ->
-  sync_produce(PidOrTopic, pulserl_producer:new_message(Value), undefined).
+sync_produce(PidOrTopic, Key, Value) when
+  (Key == ?UNDEF or is_list(Key) or is_binary(Key)) andalso
+    (is_list(Value) or is_binary(Value)) ->
+  sync_produce(PidOrTopic, pulserl_producer:new_message(Key, Value));
 
-%%--------------------------------------------------------------------
-%% @doc
-%% @end
-%%--------------------------------------------------------------------
+%%-------------------------------------------------------------------------------
+%% @doc publish a message synchronously to the specified topic or producer
+%% If `PidOrTopic` is a topic, a registry lookup is done to fine an already existing
+%% producer created for the specified topic; if none is found, one is created and
+%% register for future calls
+%%-------------------------------------------------------------------------------
 sync_produce(PidOrTopic, #prodMessage{} = Msg, Timeout) when
-  is_integer(Timeout) orelse Timeout == undefined orelse Timeout == infinity ->
+  is_integer(Timeout) orelse Timeout == ?UNDEF ->
   if is_pid(PidOrTopic) ->
-    pulserl_producer:sync_produce(PidOrTopic, Msg, Timeout);
+    pulserl_producer:sync_send(PidOrTopic, Msg, Timeout);
     true ->
-      case pulserl_instance_registry:singleton_producer(PidOrTopic, []) of
+      case pulserl_instance_registry:get_producer(PidOrTopic, []) of
         {ok, Pid} -> sync_produce(Pid, Msg, Timeout);
         Other -> Other
       end
-  end;
+  end.
 
-%%--------------------------------------------------------------------
-%% @doc
-%% @end
-%%--------------------------------------------------------------------
-sync_produce(PidOrTopic, Key, Value) ->
-  sync_produce(PidOrTopic, Key, Value, ?UNDEF).
-
-%%--------------------------------------------------------------------
-%% @doc
-%% @end
-%%--------------------------------------------------------------------
-sync_produce(PidOrTopic, Key, Value, Timeout) ->
-  sync_produce(PidOrTopic, pulserl_producer:new_message(Key, Value), Timeout).
-
-
+%%-------------------------------------------------------------------------------
+%% @doc consume a message from the consumer of the specified topic.
+%% If `PidOrTopic` is a topic, a registry lookup is done to fine an already existing
+%% consumer created for the specified topic; if none is found, one is created and
+%% register for future calls
+%%-------------------------------------------------------------------------------
 consume(PidOrTopic) ->
   if is_pid(PidOrTopic) ->
-    I = pulserl_consumer:receive_message(PidOrTopic),
-    %%error_logger:info_msg("Polling Pid: ~p        ~p", [PidOrTopic, I]),
-    case I of
-      #message{} = Message ->
-        #consumedMessage{consumer = PidOrTopic, message = Message};
-      Other ->
-        Other
-    end;
+    pulserl_consumer:receive_message(PidOrTopic);
     true ->
-      case pulserl_instance_registry:singleton_consumer(PidOrTopic, []) of
+      case pulserl_instance_registry:get_consumer(PidOrTopic, []) of
         {ok, Pid} -> consume(Pid);
-        Else -> Else
+        Other -> Other
       end
   end.
 
-ack(#consumedMessage{consumer = Pid, message = Message}) when is_pid(Pid) ->
-  pulserl_consumer:ack(Pid, Message).
+ack(#consMessage{consumer = Pid, id = Id}) ->
+  pulserl:ack(Pid, Id).
 
-ack_cumulative(#consumedMessage{consumer = Pid, message = Message}) when is_pid(Pid) ->
-  pulserl_consumer:ack(Pid, Message, true).
+ack(Pid, #messageId{} = Id) when is_pid(Pid) ->
+  pulserl_consumer:ack(Pid, Id, false).
 
-nack(#consumedMessage{consumer = Pid, message = Message}) when is_pid(Pid) ->
-  pulserl_consumer:nack(Pid, Message).
+ack_cumulative(#consMessage{consumer = Pid, id = Id}) ->
+  pulserl:ack_cumulative(Pid, Id).
+
+ack_cumulative(Pid, #messageId{} = Id) when is_pid(Pid) ->
+  pulserl_consumer:ack(Pid, Id, true).
+
+negative_ack(#consMessage{consumer = Pid, id = Id}) ->
+  pulserl:negative_ack(Pid, Id).
+
+negative_ack(Pid, #messageId{} = Id) when is_pid(Pid) ->
+  pulserl_consumer:nack(Pid, Id).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -166,9 +222,11 @@ start_consumption_in_background(TopicOrPid) ->
 
 do_consume(PidOrTopic) ->
   case consume(PidOrTopic) of
-    #consumedMessage{message = #message{value = Value}} = ConsumedMsg ->
+    #consMessage{value = Value} = ConsumedMsg ->
       _ = ack(ConsumedMsg),
       io:format("Consumer Received: ~p~n", [Value]);
+    ?ERROR_CLIENT_NOT_STARTED ->
+      error(?ERROR_CLIENT_NOT_STARTED);
     {error, Reason} ->
       error_logger:error_msg("Consumer Error. Reason = ~p", [Reason]);
     false ->

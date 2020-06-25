@@ -10,726 +10,726 @@
 -ifndef('SCHEMA_PB_H').
 -define('SCHEMA_PB_H', true).
 -record('Schema',
-        {name                   :: iodata(),        % = 1
-         schema_data            :: iodata(),        % = 3
-         type                   :: 'None' | 'String' | 'Json' | 'Protobuf' | 'Avro' | 'Bool' | 'Int8' | 'Int16' | 'Int32' | 'Int64' | 'Float' | 'Double' | 'Date' | 'Time' | 'Timestamp' | 'KeyValue' | integer(), % = 4, enum Schema.Type
-         properties = []        :: [pulsar_api:'KeyValue'()] | undefined % = 5
-        }).
+{name :: iodata(),        % = 1
+  schema_data :: iodata(),        % = 3
+  type :: 'None' | 'String' | 'Json' | 'Protobuf' | 'Avro' | 'Bool' | 'Int8' | 'Int16' | 'Int32' | 'Int64' | 'Float' | 'Double' | 'Date' | 'Time' | 'Timestamp' | 'KeyValue' | integer(), % = 4, enum Schema.Type
+  properties = [] :: [pulsar_api:'KeyValue'()] | undefined % = 5
+}).
 -endif.
 
 -ifndef('MESSAGEIDDATA_PB_H').
 -define('MESSAGEIDDATA_PB_H', true).
 -record('MessageIdData',
-        {ledgerId               :: non_neg_integer(), % = 1, 32 bits
-         entryId                :: non_neg_integer(), % = 2, 32 bits
-         partition = -1         :: integer() | undefined, % = 3, 32 bits
-         batch_index = -1       :: integer() | undefined, % = 4, 32 bits
-         ack_set = []           :: [integer()] | undefined % = 5, 32 bits
-        }).
+{ledgerId :: non_neg_integer(), % = 1, 32 bits
+  entryId :: non_neg_integer(), % = 2, 32 bits
+  partition = -1 :: integer() | undefined, % = 3, 32 bits
+  batch_index = -1 :: integer() | undefined, % = 4, 32 bits
+  ack_set = [] :: [integer()] | undefined % = 5, 32 bits
+}).
 -endif.
 
 -ifndef('KEYVALUE_PB_H').
 -define('KEYVALUE_PB_H', true).
 -record('KeyValue',
-        {key                    :: iodata(),        % = 1
-         value                  :: iodata()         % = 2
-        }).
+{key :: iodata(),        % = 1
+  value :: iodata()         % = 2
+}).
 -endif.
 
 -ifndef('KEYLONGVALUE_PB_H').
 -define('KEYLONGVALUE_PB_H', true).
 -record('KeyLongValue',
-        {key                    :: iodata(),        % = 1
-         value                  :: non_neg_integer() % = 2, 32 bits
-        }).
+{key :: iodata(),        % = 1
+  value :: non_neg_integer() % = 2, 32 bits
+}).
 -endif.
 
 -ifndef('INTRANGE_PB_H').
 -define('INTRANGE_PB_H', true).
 -record('IntRange',
-        {start                  :: integer(),       % = 1, 32 bits
-         'end'                  :: integer()        % = 2, 32 bits
-        }).
+{start :: integer(),       % = 1, 32 bits
+  'end' :: integer()        % = 2, 32 bits
+}).
 -endif.
 
 -ifndef('ENCRYPTIONKEYS_PB_H').
 -define('ENCRYPTIONKEYS_PB_H', true).
 -record('EncryptionKeys',
-        {key                    :: iodata(),        % = 1
-         value                  :: iodata(),        % = 2
-         metadata = []          :: [pulsar_api:'KeyValue'()] | undefined % = 3
-        }).
+{key :: iodata(),        % = 1
+  value :: iodata(),        % = 2
+  metadata = [] :: [pulsar_api:'KeyValue'()] | undefined % = 3
+}).
 -endif.
 
 -ifndef('MESSAGEMETADATA_PB_H').
 -define('MESSAGEMETADATA_PB_H', true).
 -record('MessageMetadata',
-        {producer_name          :: iodata(),        % = 1
-         sequence_id            :: non_neg_integer(), % = 2, 32 bits
-         publish_time           :: non_neg_integer(), % = 3, 32 bits
-         properties = []        :: [pulsar_api:'KeyValue'()] | undefined, % = 4
-         replicated_from        :: iodata() | undefined, % = 5
-         partition_key          :: iodata() | undefined, % = 6
-         replicate_to = []      :: [iodata()] | undefined, % = 7
-         compression = 'NONE'   :: 'NONE' | 'LZ4' | 'ZLIB' | 'ZSTD' | 'SNAPPY' | integer() | undefined, % = 8, enum CompressionType
-         uncompressed_size = 0  :: non_neg_integer() | undefined, % = 9, 32 bits
-         num_messages_in_batch = 1 :: integer() | undefined, % = 11, 32 bits
-         event_time = 0         :: non_neg_integer() | undefined, % = 12, 32 bits
-         encryption_keys = []   :: [pulsar_api:'EncryptionKeys'()] | undefined, % = 13
-         encryption_algo        :: iodata() | undefined, % = 14
-         encryption_param       :: iodata() | undefined, % = 15
-         schema_version         :: iodata() | undefined, % = 16
-         partition_key_b64_encoded = false :: boolean() | 0 | 1 | undefined, % = 17
-         ordering_key           :: iodata() | undefined, % = 18
-         deliver_at_time        :: integer() | undefined, % = 19, 32 bits
-         marker_type            :: integer() | undefined, % = 20, 32 bits
-         txnid_least_bits = 0   :: non_neg_integer() | undefined, % = 22, 32 bits
-         txnid_most_bits = 0    :: non_neg_integer() | undefined, % = 23, 32 bits
-         highest_sequence_id = 0 :: non_neg_integer() | undefined, % = 24, 32 bits
-         null_value = false     :: boolean() | 0 | 1 | undefined, % = 25
-         uuid                   :: iodata() | undefined, % = 26
-         num_chunks_from_msg    :: integer() | undefined, % = 27, 32 bits
-         total_chunk_msg_size   :: integer() | undefined, % = 28, 32 bits
-         chunk_id               :: integer() | undefined, % = 29, 32 bits
-         null_partition_key = false :: boolean() | 0 | 1 | undefined % = 30
-        }).
+{producer_name :: iodata(),        % = 1
+  sequence_id :: non_neg_integer(), % = 2, 32 bits
+  publish_time :: non_neg_integer(), % = 3, 32 bits
+  properties = [] :: [pulsar_api:'KeyValue'()] | undefined, % = 4
+  replicated_from :: iodata() | undefined, % = 5
+  partition_key :: iodata() | undefined, % = 6
+  replicate_to = [] :: [iodata()] | undefined, % = 7
+  compression = 'NONE' :: 'NONE' | 'LZ4' | 'ZLIB' | 'ZSTD' | 'SNAPPY' | integer() | undefined, % = 8, enum CompressionType
+  uncompressed_size = 0 :: non_neg_integer() | undefined, % = 9, 32 bits
+  num_messages_in_batch = 1 :: integer() | undefined, % = 11, 32 bits
+  event_time = 0 :: non_neg_integer() | undefined, % = 12, 32 bits
+  encryption_keys = [] :: [pulsar_api:'EncryptionKeys'()] | undefined, % = 13
+  encryption_algo :: iodata() | undefined, % = 14
+  encryption_param :: iodata() | undefined, % = 15
+  schema_version :: iodata() | undefined, % = 16
+  partition_key_b64_encoded = false :: boolean() | 0 | 1 | undefined, % = 17
+  ordering_key :: iodata() | undefined, % = 18
+  deliver_at_time :: integer() | undefined, % = 19, 32 bits
+  marker_type :: integer() | undefined, % = 20, 32 bits
+  txnid_least_bits = 0 :: non_neg_integer() | undefined, % = 22, 32 bits
+  txnid_most_bits = 0 :: non_neg_integer() | undefined, % = 23, 32 bits
+  highest_sequence_id = 0 :: non_neg_integer() | undefined, % = 24, 32 bits
+  null_value = false :: boolean() | 0 | 1 | undefined, % = 25
+  uuid :: iodata() | undefined, % = 26
+  num_chunks_from_msg :: integer() | undefined, % = 27, 32 bits
+  total_chunk_msg_size :: integer() | undefined, % = 28, 32 bits
+  chunk_id :: integer() | undefined, % = 29, 32 bits
+  null_partition_key = false :: boolean() | 0 | 1 | undefined % = 30
+}).
 -endif.
 
 -ifndef('SINGLEMESSAGEMETADATA_PB_H').
 -define('SINGLEMESSAGEMETADATA_PB_H', true).
 -record('SingleMessageMetadata',
-        {properties = []        :: [pulsar_api:'KeyValue'()] | undefined, % = 1
-         partition_key          :: iodata() | undefined, % = 2
-         payload_size           :: integer(),       % = 3, 32 bits
-         compacted_out = false  :: boolean() | 0 | 1 | undefined, % = 4
-         event_time = 0         :: non_neg_integer() | undefined, % = 5, 32 bits
-         partition_key_b64_encoded = false :: boolean() | 0 | 1 | undefined, % = 6
-         ordering_key           :: iodata() | undefined, % = 7
-         sequence_id            :: non_neg_integer() | undefined, % = 8, 32 bits
-         null_value = false     :: boolean() | 0 | 1 | undefined, % = 9
-         null_partition_key = false :: boolean() | 0 | 1 | undefined % = 10
-        }).
+{properties = [] :: [pulsar_api:'KeyValue'()] | undefined, % = 1
+  partition_key :: iodata() | undefined, % = 2
+  payload_size :: integer(),       % = 3, 32 bits
+  compacted_out = false :: boolean() | 0 | 1 | undefined, % = 4
+  event_time = 0 :: non_neg_integer() | undefined, % = 5, 32 bits
+  partition_key_b64_encoded = false :: boolean() | 0 | 1 | undefined, % = 6
+  ordering_key :: iodata() | undefined, % = 7
+  sequence_id :: non_neg_integer() | undefined, % = 8, 32 bits
+  null_value = false :: boolean() | 0 | 1 | undefined, % = 9
+  null_partition_key = false :: boolean() | 0 | 1 | undefined % = 10
+}).
 -endif.
 
 -ifndef('COMMANDCONNECT_PB_H').
 -define('COMMANDCONNECT_PB_H', true).
 -record('CommandConnect',
-        {client_version         :: iodata(),        % = 1
-         auth_method            :: 'AuthMethodNone' | 'AuthMethodYcaV1' | 'AuthMethodAthens' | integer() | undefined, % = 2, enum AuthMethod
-         auth_method_name       :: iodata() | undefined, % = 5
-         auth_data              :: iodata() | undefined, % = 3
-         protocol_version = 0   :: integer() | undefined, % = 4, 32 bits
-         proxy_to_broker_url    :: iodata() | undefined, % = 6
-         original_principal     :: iodata() | undefined, % = 7
-         original_auth_data     :: iodata() | undefined, % = 8
-         original_auth_method   :: iodata() | undefined, % = 9
-         feature_flags          :: pulsar_api:'FeatureFlags'() | undefined % = 10
-        }).
+{client_version :: iodata(),        % = 1
+  auth_method :: 'AuthMethodNone' | 'AuthMethodYcaV1' | 'AuthMethodAthens' | integer() | undefined, % = 2, enum AuthMethod
+  auth_method_name :: iodata() | undefined, % = 5
+  auth_data :: iodata() | undefined, % = 3
+  protocol_version = 0 :: integer() | undefined, % = 4, 32 bits
+  proxy_to_broker_url :: iodata() | undefined, % = 6
+  original_principal :: iodata() | undefined, % = 7
+  original_auth_data :: iodata() | undefined, % = 8
+  original_auth_method :: iodata() | undefined, % = 9
+  feature_flags :: pulsar_api:'FeatureFlags'() | undefined % = 10
+}).
 -endif.
 
 -ifndef('FEATUREFLAGS_PB_H').
 -define('FEATUREFLAGS_PB_H', true).
 -record('FeatureFlags',
-        {supports_auth_refresh = false :: boolean() | 0 | 1 | undefined % = 1
-        }).
+{supports_auth_refresh = false :: boolean() | 0 | 1 | undefined % = 1
+}).
 -endif.
 
 -ifndef('COMMANDCONNECTED_PB_H').
 -define('COMMANDCONNECTED_PB_H', true).
 -record('CommandConnected',
-        {server_version         :: iodata(),        % = 1
-         protocol_version = 0   :: integer() | undefined, % = 2, 32 bits
-         max_message_size       :: integer() | undefined % = 3, 32 bits
-        }).
+{server_version :: iodata(),        % = 1
+  protocol_version = 0 :: integer() | undefined, % = 2, 32 bits
+  max_message_size :: integer() | undefined % = 3, 32 bits
+}).
 -endif.
 
 -ifndef('COMMANDAUTHRESPONSE_PB_H').
 -define('COMMANDAUTHRESPONSE_PB_H', true).
 -record('CommandAuthResponse',
-        {client_version         :: iodata() | undefined, % = 1
-         response               :: pulsar_api:'AuthData'() | undefined, % = 2
-         protocol_version = 0   :: integer() | undefined % = 3, 32 bits
-        }).
+{client_version :: iodata() | undefined, % = 1
+  response :: pulsar_api:'AuthData'() | undefined, % = 2
+  protocol_version = 0 :: integer() | undefined % = 3, 32 bits
+}).
 -endif.
 
 -ifndef('COMMANDAUTHCHALLENGE_PB_H').
 -define('COMMANDAUTHCHALLENGE_PB_H', true).
 -record('CommandAuthChallenge',
-        {server_version         :: iodata() | undefined, % = 1
-         challenge              :: pulsar_api:'AuthData'() | undefined, % = 2
-         protocol_version = 0   :: integer() | undefined % = 3, 32 bits
-        }).
+{server_version :: iodata() | undefined, % = 1
+  challenge :: pulsar_api:'AuthData'() | undefined, % = 2
+  protocol_version = 0 :: integer() | undefined % = 3, 32 bits
+}).
 -endif.
 
 -ifndef('AUTHDATA_PB_H').
 -define('AUTHDATA_PB_H', true).
 -record('AuthData',
-        {auth_method_name       :: iodata() | undefined, % = 1
-         auth_data              :: iodata() | undefined % = 2
-        }).
+{auth_method_name :: iodata() | undefined, % = 1
+  auth_data :: iodata() | undefined % = 2
+}).
 -endif.
 
 -ifndef('KEYSHAREDMETA_PB_H').
 -define('KEYSHAREDMETA_PB_H', true).
 -record('KeySharedMeta',
-        {keySharedMode          :: 'AUTO_SPLIT' | 'STICKY' | integer(), % = 1, enum KeySharedMode
-         hashRanges = []        :: [pulsar_api:'IntRange'()] | undefined, % = 3
-         allowOutOfOrderDelivery = false :: boolean() | 0 | 1 | undefined % = 4
-        }).
+{keySharedMode :: 'AUTO_SPLIT' | 'STICKY' | integer(), % = 1, enum KeySharedMode
+  hashRanges = [] :: [pulsar_api:'IntRange'()] | undefined, % = 3
+  allowOutOfOrderDelivery = false :: boolean() | 0 | 1 | undefined % = 4
+}).
 -endif.
 
 -ifndef('COMMANDSUBSCRIBE_PB_H').
 -define('COMMANDSUBSCRIBE_PB_H', true).
 -record('CommandSubscribe',
-        {topic                  :: iodata(),        % = 1
-         subscription           :: iodata(),        % = 2
-         subType                :: 'Exclusive' | 'Shared' | 'Failover' | 'Key_Shared' | integer(), % = 3, enum CommandSubscribe.SubType
-         consumer_id            :: non_neg_integer(), % = 4, 32 bits
-         request_id             :: non_neg_integer(), % = 5, 32 bits
-         consumer_name          :: iodata() | undefined, % = 6
-         priority_level         :: integer() | undefined, % = 7, 32 bits
-         durable = true         :: boolean() | 0 | 1 | undefined, % = 8
-         start_message_id       :: pulsar_api:'MessageIdData'() | undefined, % = 9
-         metadata = []          :: [pulsar_api:'KeyValue'()] | undefined, % = 10
-         read_compacted         :: boolean() | 0 | 1 | undefined, % = 11
-         schema                 :: pulsar_api:'Schema'() | undefined, % = 12
-         initialPosition = 'Latest' :: 'Latest' | 'Earliest' | integer() | undefined, % = 13, enum CommandSubscribe.InitialPosition
-         replicate_subscription_state :: boolean() | 0 | 1 | undefined, % = 14
-         force_topic_creation = true :: boolean() | 0 | 1 | undefined, % = 15
-         start_message_rollback_duration_sec = 0 :: non_neg_integer() | undefined, % = 16, 32 bits
-         keySharedMeta          :: pulsar_api:'KeySharedMeta'() | undefined % = 17
-        }).
+{topic :: iodata(),        % = 1
+  subscription :: iodata(),        % = 2
+  subType :: 'Exclusive' | 'Shared' | 'Failover' | 'Key_Shared' | integer(), % = 3, enum CommandSubscribe.SubType
+  consumer_id :: non_neg_integer(), % = 4, 32 bits
+  request_id :: non_neg_integer(), % = 5, 32 bits
+  consumer_name :: iodata() | undefined, % = 6
+  priority_level :: integer() | undefined, % = 7, 32 bits
+  durable = true :: boolean() | 0 | 1 | undefined, % = 8
+  start_message_id :: pulsar_api:'MessageIdData'() | undefined, % = 9
+  metadata = [] :: [pulsar_api:'KeyValue'()] | undefined, % = 10
+  read_compacted :: boolean() | 0 | 1 | undefined, % = 11
+  schema :: pulsar_api:'Schema'() | undefined, % = 12
+  initialPosition = 'Latest' :: 'Latest' | 'Earliest' | integer() | undefined, % = 13, enum CommandSubscribe.InitialPosition
+  replicate_subscription_state :: boolean() | 0 | 1 | undefined, % = 14
+  force_topic_creation = true :: boolean() | 0 | 1 | undefined, % = 15
+  start_message_rollback_duration_sec = 0 :: non_neg_integer() | undefined, % = 16, 32 bits
+  keySharedMeta :: pulsar_api:'KeySharedMeta'() | undefined % = 17
+}).
 -endif.
 
 -ifndef('COMMANDPARTITIONEDTOPICMETADATA_PB_H').
 -define('COMMANDPARTITIONEDTOPICMETADATA_PB_H', true).
 -record('CommandPartitionedTopicMetadata',
-        {topic                  :: iodata(),        % = 1
-         request_id             :: non_neg_integer(), % = 2, 32 bits
-         original_principal     :: iodata() | undefined, % = 3
-         original_auth_data     :: iodata() | undefined, % = 4
-         original_auth_method   :: iodata() | undefined % = 5
-        }).
+{topic :: iodata(),        % = 1
+  request_id :: non_neg_integer(), % = 2, 32 bits
+  original_principal :: iodata() | undefined, % = 3
+  original_auth_data :: iodata() | undefined, % = 4
+  original_auth_method :: iodata() | undefined % = 5
+}).
 -endif.
 
 -ifndef('COMMANDPARTITIONEDTOPICMETADATARESPONSE_PB_H').
 -define('COMMANDPARTITIONEDTOPICMETADATARESPONSE_PB_H', true).
 -record('CommandPartitionedTopicMetadataResponse',
-        {partitions             :: non_neg_integer() | undefined, % = 1, 32 bits
-         request_id             :: non_neg_integer(), % = 2, 32 bits
-         response               :: 'Success' | 'Failed' | integer() | undefined, % = 3, enum CommandPartitionedTopicMetadataResponse.LookupType
-         error                  :: 'UnknownError' | 'MetadataError' | 'PersistenceError' | 'AuthenticationError' | 'AuthorizationError' | 'ConsumerBusy' | 'ServiceNotReady' | 'ProducerBlockedQuotaExceededError' | 'ProducerBlockedQuotaExceededException' | 'ChecksumError' | 'UnsupportedVersionError' | 'TopicNotFound' | 'SubscriptionNotFound' | 'ConsumerNotFound' | 'TooManyRequests' | 'TopicTerminatedError' | 'ProducerBusy' | 'InvalidTopicName' | 'IncompatibleSchema' | 'ConsumerAssignError' | 'TransactionCoordinatorNotFound' | 'InvalidTxnStatus' | integer() | undefined, % = 4, enum ServerError
-         message                :: iodata() | undefined % = 5
-        }).
+{partitions :: non_neg_integer() | undefined, % = 1, 32 bits
+  request_id :: non_neg_integer(), % = 2, 32 bits
+  response :: 'Success' | 'Failed' | integer() | undefined, % = 3, enum CommandPartitionedTopicMetadataResponse.LookupType
+  error :: 'UnknownError' | 'MetadataError' | 'PersistenceError' | 'AuthenticationError' | 'AuthorizationError' | 'ConsumerBusy' | 'ServiceNotReady' | 'ProducerBlockedQuotaExceededError' | 'ProducerBlockedQuotaExceededException' | 'ChecksumError' | 'UnsupportedVersionError' | 'TopicNotFound' | 'SubscriptionNotFound' | 'ConsumerNotFound' | 'TooManyRequests' | 'TopicTerminatedError' | 'ProducerBusy' | 'InvalidTopicName' | 'IncompatibleSchema' | 'ConsumerAssignError' | 'TransactionCoordinatorNotFound' | 'InvalidTxnStatus' | integer() | undefined, % = 4, enum ServerError
+  message :: iodata() | undefined % = 5
+}).
 -endif.
 
 -ifndef('COMMANDLOOKUPTOPIC_PB_H').
 -define('COMMANDLOOKUPTOPIC_PB_H', true).
 -record('CommandLookupTopic',
-        {topic                  :: iodata(),        % = 1
-         request_id             :: non_neg_integer(), % = 2, 32 bits
-         authoritative = false  :: boolean() | 0 | 1 | undefined, % = 3
-         original_principal     :: iodata() | undefined, % = 4
-         original_auth_data     :: iodata() | undefined, % = 5
-         original_auth_method   :: iodata() | undefined, % = 6
-         advertised_listener_name :: iodata() | undefined % = 7
-        }).
+{topic :: iodata(),        % = 1
+  request_id :: non_neg_integer(), % = 2, 32 bits
+  authoritative = false :: boolean() | 0 | 1 | undefined, % = 3
+  original_principal :: iodata() | undefined, % = 4
+  original_auth_data :: iodata() | undefined, % = 5
+  original_auth_method :: iodata() | undefined, % = 6
+  advertised_listener_name :: iodata() | undefined % = 7
+}).
 -endif.
 
 -ifndef('COMMANDLOOKUPTOPICRESPONSE_PB_H').
 -define('COMMANDLOOKUPTOPICRESPONSE_PB_H', true).
 -record('CommandLookupTopicResponse',
-        {brokerServiceUrl       :: iodata() | undefined, % = 1
-         brokerServiceUrlTls    :: iodata() | undefined, % = 2
-         response               :: 'Redirect' | 'Connect' | 'Failed' | integer() | undefined, % = 3, enum CommandLookupTopicResponse.LookupType
-         request_id             :: non_neg_integer(), % = 4, 32 bits
-         authoritative = false  :: boolean() | 0 | 1 | undefined, % = 5
-         error                  :: 'UnknownError' | 'MetadataError' | 'PersistenceError' | 'AuthenticationError' | 'AuthorizationError' | 'ConsumerBusy' | 'ServiceNotReady' | 'ProducerBlockedQuotaExceededError' | 'ProducerBlockedQuotaExceededException' | 'ChecksumError' | 'UnsupportedVersionError' | 'TopicNotFound' | 'SubscriptionNotFound' | 'ConsumerNotFound' | 'TooManyRequests' | 'TopicTerminatedError' | 'ProducerBusy' | 'InvalidTopicName' | 'IncompatibleSchema' | 'ConsumerAssignError' | 'TransactionCoordinatorNotFound' | 'InvalidTxnStatus' | integer() | undefined, % = 6, enum ServerError
-         message                :: iodata() | undefined, % = 7
-         proxy_through_service_url = false :: boolean() | 0 | 1 | undefined % = 8
-        }).
+{brokerServiceUrl :: iodata() | undefined, % = 1
+  brokerServiceUrlTls :: iodata() | undefined, % = 2
+  response :: 'Redirect' | 'Connect' | 'Failed' | integer() | undefined, % = 3, enum CommandLookupTopicResponse.LookupType
+  request_id :: non_neg_integer(), % = 4, 32 bits
+  authoritative = false :: boolean() | 0 | 1 | undefined, % = 5
+  error :: 'UnknownError' | 'MetadataError' | 'PersistenceError' | 'AuthenticationError' | 'AuthorizationError' | 'ConsumerBusy' | 'ServiceNotReady' | 'ProducerBlockedQuotaExceededError' | 'ProducerBlockedQuotaExceededException' | 'ChecksumError' | 'UnsupportedVersionError' | 'TopicNotFound' | 'SubscriptionNotFound' | 'ConsumerNotFound' | 'TooManyRequests' | 'TopicTerminatedError' | 'ProducerBusy' | 'InvalidTopicName' | 'IncompatibleSchema' | 'ConsumerAssignError' | 'TransactionCoordinatorNotFound' | 'InvalidTxnStatus' | integer() | undefined, % = 6, enum ServerError
+  message :: iodata() | undefined, % = 7
+  proxy_through_service_url = false :: boolean() | 0 | 1 | undefined % = 8
+}).
 -endif.
 
 -ifndef('COMMANDPRODUCER_PB_H').
 -define('COMMANDPRODUCER_PB_H', true).
 -record('CommandProducer',
-        {topic                  :: iodata(),        % = 1
-         producer_id            :: non_neg_integer(), % = 2, 32 bits
-         request_id             :: non_neg_integer(), % = 3, 32 bits
-         producer_name          :: iodata() | undefined, % = 4
-         encrypted = false      :: boolean() | 0 | 1 | undefined, % = 5
-         metadata = []          :: [pulsar_api:'KeyValue'()] | undefined, % = 6
-         schema                 :: pulsar_api:'Schema'() | undefined, % = 7
-         epoch = 0              :: non_neg_integer() | undefined, % = 8, 32 bits
-         user_provided_producer_name = true :: boolean() | 0 | 1 | undefined % = 9
-        }).
+{topic :: iodata(),        % = 1
+  producer_id :: non_neg_integer(), % = 2, 32 bits
+  request_id :: non_neg_integer(), % = 3, 32 bits
+  producer_name :: iodata() | undefined, % = 4
+  encrypted = false :: boolean() | 0 | 1 | undefined, % = 5
+  metadata = [] :: [pulsar_api:'KeyValue'()] | undefined, % = 6
+  schema :: pulsar_api:'Schema'() | undefined, % = 7
+  epoch = 0 :: non_neg_integer() | undefined, % = 8, 32 bits
+  user_provided_producer_name = true :: boolean() | 0 | 1 | undefined % = 9
+}).
 -endif.
 
 -ifndef('COMMANDSEND_PB_H').
 -define('COMMANDSEND_PB_H', true).
 -record('CommandSend',
-        {producer_id            :: non_neg_integer(), % = 1, 32 bits
-         sequence_id            :: non_neg_integer(), % = 2, 32 bits
-         num_messages = 1       :: integer() | undefined, % = 3, 32 bits
-         txnid_least_bits = 0   :: non_neg_integer() | undefined, % = 4, 32 bits
-         txnid_most_bits = 0    :: non_neg_integer() | undefined, % = 5, 32 bits
-         highest_sequence_id = 0 :: non_neg_integer() | undefined, % = 6, 32 bits
-         is_chunk = false       :: boolean() | 0 | 1 | undefined % = 7
-        }).
+{producer_id :: non_neg_integer(), % = 1, 32 bits
+  sequence_id :: non_neg_integer(), % = 2, 32 bits
+  num_messages = 1 :: integer() | undefined, % = 3, 32 bits
+  txnid_least_bits = 0 :: non_neg_integer() | undefined, % = 4, 32 bits
+  txnid_most_bits = 0 :: non_neg_integer() | undefined, % = 5, 32 bits
+  highest_sequence_id = 0 :: non_neg_integer() | undefined, % = 6, 32 bits
+  is_chunk = false :: boolean() | 0 | 1 | undefined % = 7
+}).
 -endif.
 
 -ifndef('COMMANDSENDRECEIPT_PB_H').
 -define('COMMANDSENDRECEIPT_PB_H', true).
 -record('CommandSendReceipt',
-        {producer_id            :: non_neg_integer(), % = 1, 32 bits
-         sequence_id            :: non_neg_integer(), % = 2, 32 bits
-         message_id             :: pulsar_api:'MessageIdData'() | undefined, % = 3
-         highest_sequence_id = 0 :: non_neg_integer() | undefined % = 4, 32 bits
-        }).
+{producer_id :: non_neg_integer(), % = 1, 32 bits
+  sequence_id :: non_neg_integer(), % = 2, 32 bits
+  message_id :: pulsar_api:'MessageIdData'() | undefined, % = 3
+  highest_sequence_id = 0 :: non_neg_integer() | undefined % = 4, 32 bits
+}).
 -endif.
 
 -ifndef('COMMANDSENDERROR_PB_H').
 -define('COMMANDSENDERROR_PB_H', true).
 -record('CommandSendError',
-        {producer_id            :: non_neg_integer(), % = 1, 32 bits
-         sequence_id            :: non_neg_integer(), % = 2, 32 bits
-         error                  :: 'UnknownError' | 'MetadataError' | 'PersistenceError' | 'AuthenticationError' | 'AuthorizationError' | 'ConsumerBusy' | 'ServiceNotReady' | 'ProducerBlockedQuotaExceededError' | 'ProducerBlockedQuotaExceededException' | 'ChecksumError' | 'UnsupportedVersionError' | 'TopicNotFound' | 'SubscriptionNotFound' | 'ConsumerNotFound' | 'TooManyRequests' | 'TopicTerminatedError' | 'ProducerBusy' | 'InvalidTopicName' | 'IncompatibleSchema' | 'ConsumerAssignError' | 'TransactionCoordinatorNotFound' | 'InvalidTxnStatus' | integer(), % = 3, enum ServerError
-         message                :: iodata()         % = 4
-        }).
+{producer_id :: non_neg_integer(), % = 1, 32 bits
+  sequence_id :: non_neg_integer(), % = 2, 32 bits
+  error :: 'UnknownError' | 'MetadataError' | 'PersistenceError' | 'AuthenticationError' | 'AuthorizationError' | 'ConsumerBusy' | 'ServiceNotReady' | 'ProducerBlockedQuotaExceededError' | 'ProducerBlockedQuotaExceededException' | 'ChecksumError' | 'UnsupportedVersionError' | 'TopicNotFound' | 'SubscriptionNotFound' | 'ConsumerNotFound' | 'TooManyRequests' | 'TopicTerminatedError' | 'ProducerBusy' | 'InvalidTopicName' | 'IncompatibleSchema' | 'ConsumerAssignError' | 'TransactionCoordinatorNotFound' | 'InvalidTxnStatus' | integer(), % = 3, enum ServerError
+  message :: iodata()         % = 4
+}).
 -endif.
 
 -ifndef('COMMANDMESSAGE_PB_H').
 -define('COMMANDMESSAGE_PB_H', true).
 -record('CommandMessage',
-        {consumer_id            :: non_neg_integer(), % = 1, 32 bits
-         message_id             :: pulsar_api:'MessageIdData'(), % = 2
-         redelivery_count = 0   :: non_neg_integer() | undefined, % = 3, 32 bits
-         ack_set = []           :: [integer()] | undefined % = 4, 32 bits
-        }).
+{consumer_id :: non_neg_integer(), % = 1, 32 bits
+  message_id :: pulsar_api:'MessageIdData'(), % = 2
+  redelivery_count = 0 :: non_neg_integer() | undefined, % = 3, 32 bits
+  ack_set = [] :: [integer()] | undefined % = 4, 32 bits
+}).
 -endif.
 
 -ifndef('COMMANDACK_PB_H').
 -define('COMMANDACK_PB_H', true).
 -record('CommandAck',
-        {consumer_id            :: non_neg_integer(), % = 1, 32 bits
-         ack_type               :: 'Individual' | 'Cumulative' | integer(), % = 2, enum CommandAck.AckType
-         message_id = []        :: [pulsar_api:'MessageIdData'()] | undefined, % = 3
-         validation_error       :: 'UncompressedSizeCorruption' | 'DecompressionError' | 'ChecksumMismatch' | 'BatchDeSerializeError' | 'DecryptionError' | integer() | undefined, % = 4, enum CommandAck.ValidationError
-         properties = []        :: [pulsar_api:'KeyLongValue'()] | undefined, % = 5
-         txnid_least_bits = 0   :: non_neg_integer() | undefined, % = 6, 32 bits
-         txnid_most_bits = 0    :: non_neg_integer() | undefined % = 7, 32 bits
-        }).
+{consumer_id :: non_neg_integer(), % = 1, 32 bits
+  ack_type :: 'Individual' | 'Cumulative' | integer(), % = 2, enum CommandAck.AckType
+  message_id = [] :: [pulsar_api:'MessageIdData'()] | undefined, % = 3
+  validation_error :: 'UncompressedSizeCorruption' | 'DecompressionError' | 'ChecksumMismatch' | 'BatchDeSerializeError' | 'DecryptionError' | integer() | undefined, % = 4, enum CommandAck.ValidationError
+  properties = [] :: [pulsar_api:'KeyLongValue'()] | undefined, % = 5
+  txnid_least_bits = 0 :: non_neg_integer() | undefined, % = 6, 32 bits
+  txnid_most_bits = 0 :: non_neg_integer() | undefined % = 7, 32 bits
+}).
 -endif.
 
 -ifndef('COMMANDACKRESPONSE_PB_H').
 -define('COMMANDACKRESPONSE_PB_H', true).
 -record('CommandAckResponse',
-        {consumer_id            :: non_neg_integer(), % = 1, 32 bits
-         txnid_least_bits = 0   :: non_neg_integer() | undefined, % = 2, 32 bits
-         txnid_most_bits = 0    :: non_neg_integer() | undefined, % = 3, 32 bits
-         error                  :: 'UnknownError' | 'MetadataError' | 'PersistenceError' | 'AuthenticationError' | 'AuthorizationError' | 'ConsumerBusy' | 'ServiceNotReady' | 'ProducerBlockedQuotaExceededError' | 'ProducerBlockedQuotaExceededException' | 'ChecksumError' | 'UnsupportedVersionError' | 'TopicNotFound' | 'SubscriptionNotFound' | 'ConsumerNotFound' | 'TooManyRequests' | 'TopicTerminatedError' | 'ProducerBusy' | 'InvalidTopicName' | 'IncompatibleSchema' | 'ConsumerAssignError' | 'TransactionCoordinatorNotFound' | 'InvalidTxnStatus' | integer() | undefined, % = 4, enum ServerError
-         message                :: iodata() | undefined % = 5
-        }).
+{consumer_id :: non_neg_integer(), % = 1, 32 bits
+  txnid_least_bits = 0 :: non_neg_integer() | undefined, % = 2, 32 bits
+  txnid_most_bits = 0 :: non_neg_integer() | undefined, % = 3, 32 bits
+  error :: 'UnknownError' | 'MetadataError' | 'PersistenceError' | 'AuthenticationError' | 'AuthorizationError' | 'ConsumerBusy' | 'ServiceNotReady' | 'ProducerBlockedQuotaExceededError' | 'ProducerBlockedQuotaExceededException' | 'ChecksumError' | 'UnsupportedVersionError' | 'TopicNotFound' | 'SubscriptionNotFound' | 'ConsumerNotFound' | 'TooManyRequests' | 'TopicTerminatedError' | 'ProducerBusy' | 'InvalidTopicName' | 'IncompatibleSchema' | 'ConsumerAssignError' | 'TransactionCoordinatorNotFound' | 'InvalidTxnStatus' | integer() | undefined, % = 4, enum ServerError
+  message :: iodata() | undefined % = 5
+}).
 -endif.
 
 -ifndef('COMMANDACTIVECONSUMERCHANGE_PB_H').
 -define('COMMANDACTIVECONSUMERCHANGE_PB_H', true).
 -record('CommandActiveConsumerChange',
-        {consumer_id            :: non_neg_integer(), % = 1, 32 bits
-         is_active = false      :: boolean() | 0 | 1 | undefined % = 2
-        }).
+{consumer_id :: non_neg_integer(), % = 1, 32 bits
+  is_active = false :: boolean() | 0 | 1 | undefined % = 2
+}).
 -endif.
 
 -ifndef('COMMANDFLOW_PB_H').
 -define('COMMANDFLOW_PB_H', true).
 -record('CommandFlow',
-        {consumer_id            :: non_neg_integer(), % = 1, 32 bits
-         messagePermits         :: non_neg_integer() % = 2, 32 bits
-        }).
+{consumer_id :: non_neg_integer(), % = 1, 32 bits
+  messagePermits :: non_neg_integer() % = 2, 32 bits
+}).
 -endif.
 
 -ifndef('COMMANDUNSUBSCRIBE_PB_H').
 -define('COMMANDUNSUBSCRIBE_PB_H', true).
 -record('CommandUnsubscribe',
-        {consumer_id            :: non_neg_integer(), % = 1, 32 bits
-         request_id             :: non_neg_integer() % = 2, 32 bits
-        }).
+{consumer_id :: non_neg_integer(), % = 1, 32 bits
+  request_id :: non_neg_integer() % = 2, 32 bits
+}).
 -endif.
 
 -ifndef('COMMANDSEEK_PB_H').
 -define('COMMANDSEEK_PB_H', true).
 -record('CommandSeek',
-        {consumer_id            :: non_neg_integer(), % = 1, 32 bits
-         request_id             :: non_neg_integer(), % = 2, 32 bits
-         message_id             :: pulsar_api:'MessageIdData'() | undefined, % = 3
-         message_publish_time   :: non_neg_integer() | undefined % = 4, 32 bits
-        }).
+{consumer_id :: non_neg_integer(), % = 1, 32 bits
+  request_id :: non_neg_integer(), % = 2, 32 bits
+  message_id :: pulsar_api:'MessageIdData'() | undefined, % = 3
+  message_publish_time :: non_neg_integer() | undefined % = 4, 32 bits
+}).
 -endif.
 
 -ifndef('COMMANDREACHEDENDOFTOPIC_PB_H').
 -define('COMMANDREACHEDENDOFTOPIC_PB_H', true).
 -record('CommandReachedEndOfTopic',
-        {consumer_id            :: non_neg_integer() % = 1, 32 bits
-        }).
+{consumer_id :: non_neg_integer() % = 1, 32 bits
+}).
 -endif.
 
 -ifndef('COMMANDCLOSEPRODUCER_PB_H').
 -define('COMMANDCLOSEPRODUCER_PB_H', true).
 -record('CommandCloseProducer',
-        {producer_id            :: non_neg_integer(), % = 1, 32 bits
-         request_id             :: non_neg_integer() % = 2, 32 bits
-        }).
+{producer_id :: non_neg_integer(), % = 1, 32 bits
+  request_id :: non_neg_integer() % = 2, 32 bits
+}).
 -endif.
 
 -ifndef('COMMANDCLOSECONSUMER_PB_H').
 -define('COMMANDCLOSECONSUMER_PB_H', true).
 -record('CommandCloseConsumer',
-        {consumer_id            :: non_neg_integer(), % = 1, 32 bits
-         request_id             :: non_neg_integer() % = 2, 32 bits
-        }).
+{consumer_id :: non_neg_integer(), % = 1, 32 bits
+  request_id :: non_neg_integer() % = 2, 32 bits
+}).
 -endif.
 
 -ifndef('COMMANDREDELIVERUNACKNOWLEDGEDMESSAGES_PB_H').
 -define('COMMANDREDELIVERUNACKNOWLEDGEDMESSAGES_PB_H', true).
 -record('CommandRedeliverUnacknowledgedMessages',
-        {consumer_id            :: non_neg_integer(), % = 1, 32 bits
-         message_ids = []       :: [pulsar_api:'MessageIdData'()] | undefined % = 2
-        }).
+{consumer_id :: non_neg_integer(), % = 1, 32 bits
+  message_ids = [] :: [pulsar_api:'MessageIdData'()] | undefined % = 2
+}).
 -endif.
 
 -ifndef('COMMANDSUCCESS_PB_H').
 -define('COMMANDSUCCESS_PB_H', true).
 -record('CommandSuccess',
-        {request_id             :: non_neg_integer(), % = 1, 32 bits
-         schema                 :: pulsar_api:'Schema'() | undefined % = 2
-        }).
+{request_id :: non_neg_integer(), % = 1, 32 bits
+  schema :: pulsar_api:'Schema'() | undefined % = 2
+}).
 -endif.
 
 -ifndef('COMMANDPRODUCERSUCCESS_PB_H').
 -define('COMMANDPRODUCERSUCCESS_PB_H', true).
 -record('CommandProducerSuccess',
-        {request_id             :: non_neg_integer(), % = 1, 32 bits
-         producer_name          :: iodata(),        % = 2
-         last_sequence_id = -1  :: integer() | undefined, % = 3, 32 bits
-         schema_version         :: iodata() | undefined % = 4
-        }).
+{request_id :: non_neg_integer(), % = 1, 32 bits
+  producer_name :: iodata(),        % = 2
+  last_sequence_id = -1 :: integer() | undefined, % = 3, 32 bits
+  schema_version :: iodata() | undefined % = 4
+}).
 -endif.
 
 -ifndef('COMMANDERROR_PB_H').
 -define('COMMANDERROR_PB_H', true).
 -record('CommandError',
-        {request_id             :: non_neg_integer(), % = 1, 32 bits
-         error                  :: 'UnknownError' | 'MetadataError' | 'PersistenceError' | 'AuthenticationError' | 'AuthorizationError' | 'ConsumerBusy' | 'ServiceNotReady' | 'ProducerBlockedQuotaExceededError' | 'ProducerBlockedQuotaExceededException' | 'ChecksumError' | 'UnsupportedVersionError' | 'TopicNotFound' | 'SubscriptionNotFound' | 'ConsumerNotFound' | 'TooManyRequests' | 'TopicTerminatedError' | 'ProducerBusy' | 'InvalidTopicName' | 'IncompatibleSchema' | 'ConsumerAssignError' | 'TransactionCoordinatorNotFound' | 'InvalidTxnStatus' | integer(), % = 2, enum ServerError
-         message                :: iodata()         % = 3
-        }).
+{request_id :: non_neg_integer(), % = 1, 32 bits
+  error :: 'UnknownError' | 'MetadataError' | 'PersistenceError' | 'AuthenticationError' | 'AuthorizationError' | 'ConsumerBusy' | 'ServiceNotReady' | 'ProducerBlockedQuotaExceededError' | 'ProducerBlockedQuotaExceededException' | 'ChecksumError' | 'UnsupportedVersionError' | 'TopicNotFound' | 'SubscriptionNotFound' | 'ConsumerNotFound' | 'TooManyRequests' | 'TopicTerminatedError' | 'ProducerBusy' | 'InvalidTopicName' | 'IncompatibleSchema' | 'ConsumerAssignError' | 'TransactionCoordinatorNotFound' | 'InvalidTxnStatus' | integer(), % = 2, enum ServerError
+  message :: iodata()         % = 3
+}).
 -endif.
 
 -ifndef('COMMANDPING_PB_H').
 -define('COMMANDPING_PB_H', true).
 -record('CommandPing',
-        {
-        }).
+{
+}).
 -endif.
 
 -ifndef('COMMANDPONG_PB_H').
 -define('COMMANDPONG_PB_H', true).
 -record('CommandPong',
-        {
-        }).
+{
+}).
 -endif.
 
 -ifndef('COMMANDCONSUMERSTATS_PB_H').
 -define('COMMANDCONSUMERSTATS_PB_H', true).
 -record('CommandConsumerStats',
-        {request_id             :: non_neg_integer(), % = 1, 32 bits
-         consumer_id            :: non_neg_integer() % = 4, 32 bits
-        }).
+{request_id :: non_neg_integer(), % = 1, 32 bits
+  consumer_id :: non_neg_integer() % = 4, 32 bits
+}).
 -endif.
 
 -ifndef('COMMANDCONSUMERSTATSRESPONSE_PB_H').
 -define('COMMANDCONSUMERSTATSRESPONSE_PB_H', true).
 -record('CommandConsumerStatsResponse',
-        {request_id             :: non_neg_integer(), % = 1, 32 bits
-         error_code             :: 'UnknownError' | 'MetadataError' | 'PersistenceError' | 'AuthenticationError' | 'AuthorizationError' | 'ConsumerBusy' | 'ServiceNotReady' | 'ProducerBlockedQuotaExceededError' | 'ProducerBlockedQuotaExceededException' | 'ChecksumError' | 'UnsupportedVersionError' | 'TopicNotFound' | 'SubscriptionNotFound' | 'ConsumerNotFound' | 'TooManyRequests' | 'TopicTerminatedError' | 'ProducerBusy' | 'InvalidTopicName' | 'IncompatibleSchema' | 'ConsumerAssignError' | 'TransactionCoordinatorNotFound' | 'InvalidTxnStatus' | integer() | undefined, % = 2, enum ServerError
-         error_message          :: iodata() | undefined, % = 3
-         msgRateOut             :: float() | integer() | infinity | '-infinity' | nan | undefined, % = 4
-         msgThroughputOut       :: float() | integer() | infinity | '-infinity' | nan | undefined, % = 5
-         msgRateRedeliver       :: float() | integer() | infinity | '-infinity' | nan | undefined, % = 6
-         consumerName           :: iodata() | undefined, % = 7
-         availablePermits       :: non_neg_integer() | undefined, % = 8, 32 bits
-         unackedMessages        :: non_neg_integer() | undefined, % = 9, 32 bits
-         blockedConsumerOnUnackedMsgs :: boolean() | 0 | 1 | undefined, % = 10
-         address                :: iodata() | undefined, % = 11
-         connectedSince         :: iodata() | undefined, % = 12
-         type                   :: iodata() | undefined, % = 13
-         msgRateExpired         :: float() | integer() | infinity | '-infinity' | nan | undefined, % = 14
-         msgBacklog             :: non_neg_integer() | undefined % = 15, 32 bits
-        }).
+{request_id :: non_neg_integer(), % = 1, 32 bits
+  error_code :: 'UnknownError' | 'MetadataError' | 'PersistenceError' | 'AuthenticationError' | 'AuthorizationError' | 'ConsumerBusy' | 'ServiceNotReady' | 'ProducerBlockedQuotaExceededError' | 'ProducerBlockedQuotaExceededException' | 'ChecksumError' | 'UnsupportedVersionError' | 'TopicNotFound' | 'SubscriptionNotFound' | 'ConsumerNotFound' | 'TooManyRequests' | 'TopicTerminatedError' | 'ProducerBusy' | 'InvalidTopicName' | 'IncompatibleSchema' | 'ConsumerAssignError' | 'TransactionCoordinatorNotFound' | 'InvalidTxnStatus' | integer() | undefined, % = 2, enum ServerError
+  error_message :: iodata() | undefined, % = 3
+  msgRateOut :: float() | integer() | infinity | '-infinity' | nan | undefined, % = 4
+  msgThroughputOut :: float() | integer() | infinity | '-infinity' | nan | undefined, % = 5
+  msgRateRedeliver :: float() | integer() | infinity | '-infinity' | nan | undefined, % = 6
+  consumerName :: iodata() | undefined, % = 7
+  availablePermits :: non_neg_integer() | undefined, % = 8, 32 bits
+  unackedMessages :: non_neg_integer() | undefined, % = 9, 32 bits
+  blockedConsumerOnUnackedMsgs :: boolean() | 0 | 1 | undefined, % = 10
+  address :: iodata() | undefined, % = 11
+  connectedSince :: iodata() | undefined, % = 12
+  type :: iodata() | undefined, % = 13
+  msgRateExpired :: float() | integer() | infinity | '-infinity' | nan | undefined, % = 14
+  msgBacklog :: non_neg_integer() | undefined % = 15, 32 bits
+}).
 -endif.
 
 -ifndef('COMMANDGETLASTMESSAGEID_PB_H').
 -define('COMMANDGETLASTMESSAGEID_PB_H', true).
 -record('CommandGetLastMessageId',
-        {consumer_id            :: non_neg_integer(), % = 1, 32 bits
-         request_id             :: non_neg_integer() % = 2, 32 bits
-        }).
+{consumer_id :: non_neg_integer(), % = 1, 32 bits
+  request_id :: non_neg_integer() % = 2, 32 bits
+}).
 -endif.
 
 -ifndef('COMMANDGETLASTMESSAGEIDRESPONSE_PB_H').
 -define('COMMANDGETLASTMESSAGEIDRESPONSE_PB_H', true).
 -record('CommandGetLastMessageIdResponse',
-        {last_message_id        :: pulsar_api:'MessageIdData'(), % = 1
-         request_id             :: non_neg_integer() % = 2, 32 bits
-        }).
+{last_message_id :: pulsar_api:'MessageIdData'(), % = 1
+  request_id :: non_neg_integer() % = 2, 32 bits
+}).
 -endif.
 
 -ifndef('COMMANDGETTOPICSOFNAMESPACE_PB_H').
 -define('COMMANDGETTOPICSOFNAMESPACE_PB_H', true).
 -record('CommandGetTopicsOfNamespace',
-        {request_id             :: non_neg_integer(), % = 1, 32 bits
-         namespace              :: iodata(),        % = 2
-         mode = 'PERSISTENT'    :: 'PERSISTENT' | 'NON_PERSISTENT' | 'ALL' | integer() | undefined % = 3, enum CommandGetTopicsOfNamespace.Mode
-        }).
+{request_id :: non_neg_integer(), % = 1, 32 bits
+  namespace :: iodata(),        % = 2
+  mode = 'PERSISTENT' :: 'PERSISTENT' | 'NON_PERSISTENT' | 'ALL' | integer() | undefined % = 3, enum CommandGetTopicsOfNamespace.Mode
+}).
 -endif.
 
 -ifndef('COMMANDGETTOPICSOFNAMESPACERESPONSE_PB_H').
 -define('COMMANDGETTOPICSOFNAMESPACERESPONSE_PB_H', true).
 -record('CommandGetTopicsOfNamespaceResponse',
-        {request_id             :: non_neg_integer(), % = 1, 32 bits
-         topics = []            :: [iodata()] | undefined % = 2
-        }).
+{request_id :: non_neg_integer(), % = 1, 32 bits
+  topics = [] :: [iodata()] | undefined % = 2
+}).
 -endif.
 
 -ifndef('COMMANDGETSCHEMA_PB_H').
 -define('COMMANDGETSCHEMA_PB_H', true).
 -record('CommandGetSchema',
-        {request_id             :: non_neg_integer(), % = 1, 32 bits
-         topic                  :: iodata(),        % = 2
-         schema_version         :: iodata() | undefined % = 3
-        }).
+{request_id :: non_neg_integer(), % = 1, 32 bits
+  topic :: iodata(),        % = 2
+  schema_version :: iodata() | undefined % = 3
+}).
 -endif.
 
 -ifndef('COMMANDGETSCHEMARESPONSE_PB_H').
 -define('COMMANDGETSCHEMARESPONSE_PB_H', true).
 -record('CommandGetSchemaResponse',
-        {request_id             :: non_neg_integer(), % = 1, 32 bits
-         error_code             :: 'UnknownError' | 'MetadataError' | 'PersistenceError' | 'AuthenticationError' | 'AuthorizationError' | 'ConsumerBusy' | 'ServiceNotReady' | 'ProducerBlockedQuotaExceededError' | 'ProducerBlockedQuotaExceededException' | 'ChecksumError' | 'UnsupportedVersionError' | 'TopicNotFound' | 'SubscriptionNotFound' | 'ConsumerNotFound' | 'TooManyRequests' | 'TopicTerminatedError' | 'ProducerBusy' | 'InvalidTopicName' | 'IncompatibleSchema' | 'ConsumerAssignError' | 'TransactionCoordinatorNotFound' | 'InvalidTxnStatus' | integer() | undefined, % = 2, enum ServerError
-         error_message          :: iodata() | undefined, % = 3
-         schema                 :: pulsar_api:'Schema'() | undefined, % = 4
-         schema_version         :: iodata() | undefined % = 5
-        }).
+{request_id :: non_neg_integer(), % = 1, 32 bits
+  error_code :: 'UnknownError' | 'MetadataError' | 'PersistenceError' | 'AuthenticationError' | 'AuthorizationError' | 'ConsumerBusy' | 'ServiceNotReady' | 'ProducerBlockedQuotaExceededError' | 'ProducerBlockedQuotaExceededException' | 'ChecksumError' | 'UnsupportedVersionError' | 'TopicNotFound' | 'SubscriptionNotFound' | 'ConsumerNotFound' | 'TooManyRequests' | 'TopicTerminatedError' | 'ProducerBusy' | 'InvalidTopicName' | 'IncompatibleSchema' | 'ConsumerAssignError' | 'TransactionCoordinatorNotFound' | 'InvalidTxnStatus' | integer() | undefined, % = 2, enum ServerError
+  error_message :: iodata() | undefined, % = 3
+  schema :: pulsar_api:'Schema'() | undefined, % = 4
+  schema_version :: iodata() | undefined % = 5
+}).
 -endif.
 
 -ifndef('COMMANDGETORCREATESCHEMA_PB_H').
 -define('COMMANDGETORCREATESCHEMA_PB_H', true).
 -record('CommandGetOrCreateSchema',
-        {request_id             :: non_neg_integer(), % = 1, 32 bits
-         topic                  :: iodata(),        % = 2
-         schema                 :: pulsar_api:'Schema'() % = 3
-        }).
+{request_id :: non_neg_integer(), % = 1, 32 bits
+  topic :: iodata(),        % = 2
+  schema :: pulsar_api:'Schema'() % = 3
+}).
 -endif.
 
 -ifndef('COMMANDGETORCREATESCHEMARESPONSE_PB_H').
 -define('COMMANDGETORCREATESCHEMARESPONSE_PB_H', true).
 -record('CommandGetOrCreateSchemaResponse',
-        {request_id             :: non_neg_integer(), % = 1, 32 bits
-         error_code             :: 'UnknownError' | 'MetadataError' | 'PersistenceError' | 'AuthenticationError' | 'AuthorizationError' | 'ConsumerBusy' | 'ServiceNotReady' | 'ProducerBlockedQuotaExceededError' | 'ProducerBlockedQuotaExceededException' | 'ChecksumError' | 'UnsupportedVersionError' | 'TopicNotFound' | 'SubscriptionNotFound' | 'ConsumerNotFound' | 'TooManyRequests' | 'TopicTerminatedError' | 'ProducerBusy' | 'InvalidTopicName' | 'IncompatibleSchema' | 'ConsumerAssignError' | 'TransactionCoordinatorNotFound' | 'InvalidTxnStatus' | integer() | undefined, % = 2, enum ServerError
-         error_message          :: iodata() | undefined, % = 3
-         schema_version         :: iodata() | undefined % = 4
-        }).
+{request_id :: non_neg_integer(), % = 1, 32 bits
+  error_code :: 'UnknownError' | 'MetadataError' | 'PersistenceError' | 'AuthenticationError' | 'AuthorizationError' | 'ConsumerBusy' | 'ServiceNotReady' | 'ProducerBlockedQuotaExceededError' | 'ProducerBlockedQuotaExceededException' | 'ChecksumError' | 'UnsupportedVersionError' | 'TopicNotFound' | 'SubscriptionNotFound' | 'ConsumerNotFound' | 'TooManyRequests' | 'TopicTerminatedError' | 'ProducerBusy' | 'InvalidTopicName' | 'IncompatibleSchema' | 'ConsumerAssignError' | 'TransactionCoordinatorNotFound' | 'InvalidTxnStatus' | integer() | undefined, % = 2, enum ServerError
+  error_message :: iodata() | undefined, % = 3
+  schema_version :: iodata() | undefined % = 4
+}).
 -endif.
 
 -ifndef('COMMANDNEWTXN_PB_H').
 -define('COMMANDNEWTXN_PB_H', true).
 -record('CommandNewTxn',
-        {request_id             :: non_neg_integer(), % = 1, 32 bits
-         txn_ttl_seconds = 0    :: non_neg_integer() | undefined, % = 2, 32 bits
-         tc_id = 0              :: non_neg_integer() | undefined % = 3, 32 bits
-        }).
+{request_id :: non_neg_integer(), % = 1, 32 bits
+  txn_ttl_seconds = 0 :: non_neg_integer() | undefined, % = 2, 32 bits
+  tc_id = 0 :: non_neg_integer() | undefined % = 3, 32 bits
+}).
 -endif.
 
 -ifndef('COMMANDNEWTXNRESPONSE_PB_H').
 -define('COMMANDNEWTXNRESPONSE_PB_H', true).
 -record('CommandNewTxnResponse',
-        {request_id             :: non_neg_integer(), % = 1, 32 bits
-         txnid_least_bits = 0   :: non_neg_integer() | undefined, % = 2, 32 bits
-         txnid_most_bits = 0    :: non_neg_integer() | undefined, % = 3, 32 bits
-         error                  :: 'UnknownError' | 'MetadataError' | 'PersistenceError' | 'AuthenticationError' | 'AuthorizationError' | 'ConsumerBusy' | 'ServiceNotReady' | 'ProducerBlockedQuotaExceededError' | 'ProducerBlockedQuotaExceededException' | 'ChecksumError' | 'UnsupportedVersionError' | 'TopicNotFound' | 'SubscriptionNotFound' | 'ConsumerNotFound' | 'TooManyRequests' | 'TopicTerminatedError' | 'ProducerBusy' | 'InvalidTopicName' | 'IncompatibleSchema' | 'ConsumerAssignError' | 'TransactionCoordinatorNotFound' | 'InvalidTxnStatus' | integer() | undefined, % = 4, enum ServerError
-         message                :: iodata() | undefined % = 5
-        }).
+{request_id :: non_neg_integer(), % = 1, 32 bits
+  txnid_least_bits = 0 :: non_neg_integer() | undefined, % = 2, 32 bits
+  txnid_most_bits = 0 :: non_neg_integer() | undefined, % = 3, 32 bits
+  error :: 'UnknownError' | 'MetadataError' | 'PersistenceError' | 'AuthenticationError' | 'AuthorizationError' | 'ConsumerBusy' | 'ServiceNotReady' | 'ProducerBlockedQuotaExceededError' | 'ProducerBlockedQuotaExceededException' | 'ChecksumError' | 'UnsupportedVersionError' | 'TopicNotFound' | 'SubscriptionNotFound' | 'ConsumerNotFound' | 'TooManyRequests' | 'TopicTerminatedError' | 'ProducerBusy' | 'InvalidTopicName' | 'IncompatibleSchema' | 'ConsumerAssignError' | 'TransactionCoordinatorNotFound' | 'InvalidTxnStatus' | integer() | undefined, % = 4, enum ServerError
+  message :: iodata() | undefined % = 5
+}).
 -endif.
 
 -ifndef('COMMANDADDPARTITIONTOTXN_PB_H').
 -define('COMMANDADDPARTITIONTOTXN_PB_H', true).
 -record('CommandAddPartitionToTxn',
-        {request_id             :: non_neg_integer(), % = 1, 32 bits
-         txnid_least_bits = 0   :: non_neg_integer() | undefined, % = 2, 32 bits
-         txnid_most_bits = 0    :: non_neg_integer() | undefined, % = 3, 32 bits
-         partitions = []        :: [iodata()] | undefined % = 4
-        }).
+{request_id :: non_neg_integer(), % = 1, 32 bits
+  txnid_least_bits = 0 :: non_neg_integer() | undefined, % = 2, 32 bits
+  txnid_most_bits = 0 :: non_neg_integer() | undefined, % = 3, 32 bits
+  partitions = [] :: [iodata()] | undefined % = 4
+}).
 -endif.
 
 -ifndef('COMMANDADDPARTITIONTOTXNRESPONSE_PB_H').
 -define('COMMANDADDPARTITIONTOTXNRESPONSE_PB_H', true).
 -record('CommandAddPartitionToTxnResponse',
-        {request_id             :: non_neg_integer(), % = 1, 32 bits
-         txnid_least_bits = 0   :: non_neg_integer() | undefined, % = 2, 32 bits
-         txnid_most_bits = 0    :: non_neg_integer() | undefined, % = 3, 32 bits
-         error                  :: 'UnknownError' | 'MetadataError' | 'PersistenceError' | 'AuthenticationError' | 'AuthorizationError' | 'ConsumerBusy' | 'ServiceNotReady' | 'ProducerBlockedQuotaExceededError' | 'ProducerBlockedQuotaExceededException' | 'ChecksumError' | 'UnsupportedVersionError' | 'TopicNotFound' | 'SubscriptionNotFound' | 'ConsumerNotFound' | 'TooManyRequests' | 'TopicTerminatedError' | 'ProducerBusy' | 'InvalidTopicName' | 'IncompatibleSchema' | 'ConsumerAssignError' | 'TransactionCoordinatorNotFound' | 'InvalidTxnStatus' | integer() | undefined, % = 4, enum ServerError
-         message                :: iodata() | undefined % = 5
-        }).
+{request_id :: non_neg_integer(), % = 1, 32 bits
+  txnid_least_bits = 0 :: non_neg_integer() | undefined, % = 2, 32 bits
+  txnid_most_bits = 0 :: non_neg_integer() | undefined, % = 3, 32 bits
+  error :: 'UnknownError' | 'MetadataError' | 'PersistenceError' | 'AuthenticationError' | 'AuthorizationError' | 'ConsumerBusy' | 'ServiceNotReady' | 'ProducerBlockedQuotaExceededError' | 'ProducerBlockedQuotaExceededException' | 'ChecksumError' | 'UnsupportedVersionError' | 'TopicNotFound' | 'SubscriptionNotFound' | 'ConsumerNotFound' | 'TooManyRequests' | 'TopicTerminatedError' | 'ProducerBusy' | 'InvalidTopicName' | 'IncompatibleSchema' | 'ConsumerAssignError' | 'TransactionCoordinatorNotFound' | 'InvalidTxnStatus' | integer() | undefined, % = 4, enum ServerError
+  message :: iodata() | undefined % = 5
+}).
 -endif.
 
 -ifndef('SUBSCRIPTION_PB_H').
 -define('SUBSCRIPTION_PB_H', true).
 -record('Subscription',
-        {topic                  :: iodata(),        % = 1
-         subscription           :: iodata()         % = 2
-        }).
+{topic :: iodata(),        % = 1
+  subscription :: iodata()         % = 2
+}).
 -endif.
 
 -ifndef('COMMANDADDSUBSCRIPTIONTOTXN_PB_H').
 -define('COMMANDADDSUBSCRIPTIONTOTXN_PB_H', true).
 -record('CommandAddSubscriptionToTxn',
-        {request_id             :: non_neg_integer(), % = 1, 32 bits
-         txnid_least_bits = 0   :: non_neg_integer() | undefined, % = 2, 32 bits
-         txnid_most_bits = 0    :: non_neg_integer() | undefined, % = 3, 32 bits
-         subscription = []      :: [pulsar_api:'Subscription'()] | undefined % = 4
-        }).
+{request_id :: non_neg_integer(), % = 1, 32 bits
+  txnid_least_bits = 0 :: non_neg_integer() | undefined, % = 2, 32 bits
+  txnid_most_bits = 0 :: non_neg_integer() | undefined, % = 3, 32 bits
+  subscription = [] :: [pulsar_api:'Subscription'()] | undefined % = 4
+}).
 -endif.
 
 -ifndef('COMMANDADDSUBSCRIPTIONTOTXNRESPONSE_PB_H').
 -define('COMMANDADDSUBSCRIPTIONTOTXNRESPONSE_PB_H', true).
 -record('CommandAddSubscriptionToTxnResponse',
-        {request_id             :: non_neg_integer(), % = 1, 32 bits
-         txnid_least_bits = 0   :: non_neg_integer() | undefined, % = 2, 32 bits
-         txnid_most_bits = 0    :: non_neg_integer() | undefined, % = 3, 32 bits
-         error                  :: 'UnknownError' | 'MetadataError' | 'PersistenceError' | 'AuthenticationError' | 'AuthorizationError' | 'ConsumerBusy' | 'ServiceNotReady' | 'ProducerBlockedQuotaExceededError' | 'ProducerBlockedQuotaExceededException' | 'ChecksumError' | 'UnsupportedVersionError' | 'TopicNotFound' | 'SubscriptionNotFound' | 'ConsumerNotFound' | 'TooManyRequests' | 'TopicTerminatedError' | 'ProducerBusy' | 'InvalidTopicName' | 'IncompatibleSchema' | 'ConsumerAssignError' | 'TransactionCoordinatorNotFound' | 'InvalidTxnStatus' | integer() | undefined, % = 4, enum ServerError
-         message                :: iodata() | undefined % = 5
-        }).
+{request_id :: non_neg_integer(), % = 1, 32 bits
+  txnid_least_bits = 0 :: non_neg_integer() | undefined, % = 2, 32 bits
+  txnid_most_bits = 0 :: non_neg_integer() | undefined, % = 3, 32 bits
+  error :: 'UnknownError' | 'MetadataError' | 'PersistenceError' | 'AuthenticationError' | 'AuthorizationError' | 'ConsumerBusy' | 'ServiceNotReady' | 'ProducerBlockedQuotaExceededError' | 'ProducerBlockedQuotaExceededException' | 'ChecksumError' | 'UnsupportedVersionError' | 'TopicNotFound' | 'SubscriptionNotFound' | 'ConsumerNotFound' | 'TooManyRequests' | 'TopicTerminatedError' | 'ProducerBusy' | 'InvalidTopicName' | 'IncompatibleSchema' | 'ConsumerAssignError' | 'TransactionCoordinatorNotFound' | 'InvalidTxnStatus' | integer() | undefined, % = 4, enum ServerError
+  message :: iodata() | undefined % = 5
+}).
 -endif.
 
 -ifndef('COMMANDENDTXN_PB_H').
 -define('COMMANDENDTXN_PB_H', true).
 -record('CommandEndTxn',
-        {request_id             :: non_neg_integer(), % = 1, 32 bits
-         txnid_least_bits = 0   :: non_neg_integer() | undefined, % = 2, 32 bits
-         txnid_most_bits = 0    :: non_neg_integer() | undefined, % = 3, 32 bits
-         txn_action             :: 'COMMIT' | 'ABORT' | integer() | undefined % = 4, enum TxnAction
-        }).
+{request_id :: non_neg_integer(), % = 1, 32 bits
+  txnid_least_bits = 0 :: non_neg_integer() | undefined, % = 2, 32 bits
+  txnid_most_bits = 0 :: non_neg_integer() | undefined, % = 3, 32 bits
+  txn_action :: 'COMMIT' | 'ABORT' | integer() | undefined % = 4, enum TxnAction
+}).
 -endif.
 
 -ifndef('COMMANDENDTXNRESPONSE_PB_H').
 -define('COMMANDENDTXNRESPONSE_PB_H', true).
 -record('CommandEndTxnResponse',
-        {request_id             :: non_neg_integer(), % = 1, 32 bits
-         txnid_least_bits = 0   :: non_neg_integer() | undefined, % = 2, 32 bits
-         txnid_most_bits = 0    :: non_neg_integer() | undefined, % = 3, 32 bits
-         error                  :: 'UnknownError' | 'MetadataError' | 'PersistenceError' | 'AuthenticationError' | 'AuthorizationError' | 'ConsumerBusy' | 'ServiceNotReady' | 'ProducerBlockedQuotaExceededError' | 'ProducerBlockedQuotaExceededException' | 'ChecksumError' | 'UnsupportedVersionError' | 'TopicNotFound' | 'SubscriptionNotFound' | 'ConsumerNotFound' | 'TooManyRequests' | 'TopicTerminatedError' | 'ProducerBusy' | 'InvalidTopicName' | 'IncompatibleSchema' | 'ConsumerAssignError' | 'TransactionCoordinatorNotFound' | 'InvalidTxnStatus' | integer() | undefined, % = 4, enum ServerError
-         message                :: iodata() | undefined % = 5
-        }).
+{request_id :: non_neg_integer(), % = 1, 32 bits
+  txnid_least_bits = 0 :: non_neg_integer() | undefined, % = 2, 32 bits
+  txnid_most_bits = 0 :: non_neg_integer() | undefined, % = 3, 32 bits
+  error :: 'UnknownError' | 'MetadataError' | 'PersistenceError' | 'AuthenticationError' | 'AuthorizationError' | 'ConsumerBusy' | 'ServiceNotReady' | 'ProducerBlockedQuotaExceededError' | 'ProducerBlockedQuotaExceededException' | 'ChecksumError' | 'UnsupportedVersionError' | 'TopicNotFound' | 'SubscriptionNotFound' | 'ConsumerNotFound' | 'TooManyRequests' | 'TopicTerminatedError' | 'ProducerBusy' | 'InvalidTopicName' | 'IncompatibleSchema' | 'ConsumerAssignError' | 'TransactionCoordinatorNotFound' | 'InvalidTxnStatus' | integer() | undefined, % = 4, enum ServerError
+  message :: iodata() | undefined % = 5
+}).
 -endif.
 
 -ifndef('COMMANDENDTXNONPARTITION_PB_H').
 -define('COMMANDENDTXNONPARTITION_PB_H', true).
 -record('CommandEndTxnOnPartition',
-        {request_id             :: non_neg_integer(), % = 1, 32 bits
-         txnid_least_bits = 0   :: non_neg_integer() | undefined, % = 2, 32 bits
-         txnid_most_bits = 0    :: non_neg_integer() | undefined, % = 3, 32 bits
-         topic                  :: iodata() | undefined, % = 4
-         txn_action             :: 'COMMIT' | 'ABORT' | integer() | undefined % = 5, enum TxnAction
-        }).
+{request_id :: non_neg_integer(), % = 1, 32 bits
+  txnid_least_bits = 0 :: non_neg_integer() | undefined, % = 2, 32 bits
+  txnid_most_bits = 0 :: non_neg_integer() | undefined, % = 3, 32 bits
+  topic :: iodata() | undefined, % = 4
+  txn_action :: 'COMMIT' | 'ABORT' | integer() | undefined % = 5, enum TxnAction
+}).
 -endif.
 
 -ifndef('COMMANDENDTXNONPARTITIONRESPONSE_PB_H').
 -define('COMMANDENDTXNONPARTITIONRESPONSE_PB_H', true).
 -record('CommandEndTxnOnPartitionResponse',
-        {request_id             :: non_neg_integer(), % = 1, 32 bits
-         txnid_least_bits = 0   :: non_neg_integer() | undefined, % = 2, 32 bits
-         txnid_most_bits = 0    :: non_neg_integer() | undefined, % = 3, 32 bits
-         error                  :: 'UnknownError' | 'MetadataError' | 'PersistenceError' | 'AuthenticationError' | 'AuthorizationError' | 'ConsumerBusy' | 'ServiceNotReady' | 'ProducerBlockedQuotaExceededError' | 'ProducerBlockedQuotaExceededException' | 'ChecksumError' | 'UnsupportedVersionError' | 'TopicNotFound' | 'SubscriptionNotFound' | 'ConsumerNotFound' | 'TooManyRequests' | 'TopicTerminatedError' | 'ProducerBusy' | 'InvalidTopicName' | 'IncompatibleSchema' | 'ConsumerAssignError' | 'TransactionCoordinatorNotFound' | 'InvalidTxnStatus' | integer() | undefined, % = 4, enum ServerError
-         message                :: iodata() | undefined % = 5
-        }).
+{request_id :: non_neg_integer(), % = 1, 32 bits
+  txnid_least_bits = 0 :: non_neg_integer() | undefined, % = 2, 32 bits
+  txnid_most_bits = 0 :: non_neg_integer() | undefined, % = 3, 32 bits
+  error :: 'UnknownError' | 'MetadataError' | 'PersistenceError' | 'AuthenticationError' | 'AuthorizationError' | 'ConsumerBusy' | 'ServiceNotReady' | 'ProducerBlockedQuotaExceededError' | 'ProducerBlockedQuotaExceededException' | 'ChecksumError' | 'UnsupportedVersionError' | 'TopicNotFound' | 'SubscriptionNotFound' | 'ConsumerNotFound' | 'TooManyRequests' | 'TopicTerminatedError' | 'ProducerBusy' | 'InvalidTopicName' | 'IncompatibleSchema' | 'ConsumerAssignError' | 'TransactionCoordinatorNotFound' | 'InvalidTxnStatus' | integer() | undefined, % = 4, enum ServerError
+  message :: iodata() | undefined % = 5
+}).
 -endif.
 
 -ifndef('COMMANDENDTXNONSUBSCRIPTION_PB_H').
 -define('COMMANDENDTXNONSUBSCRIPTION_PB_H', true).
 -record('CommandEndTxnOnSubscription',
-        {request_id             :: non_neg_integer(), % = 1, 32 bits
-         txnid_least_bits = 0   :: non_neg_integer() | undefined, % = 2, 32 bits
-         txnid_most_bits = 0    :: non_neg_integer() | undefined, % = 3, 32 bits
-         subscription           :: pulsar_api:'Subscription'() | undefined, % = 4
-         txn_action             :: 'COMMIT' | 'ABORT' | integer() | undefined % = 5, enum TxnAction
-        }).
+{request_id :: non_neg_integer(), % = 1, 32 bits
+  txnid_least_bits = 0 :: non_neg_integer() | undefined, % = 2, 32 bits
+  txnid_most_bits = 0 :: non_neg_integer() | undefined, % = 3, 32 bits
+  subscription :: pulsar_api:'Subscription'() | undefined, % = 4
+  txn_action :: 'COMMIT' | 'ABORT' | integer() | undefined % = 5, enum TxnAction
+}).
 -endif.
 
 -ifndef('COMMANDENDTXNONSUBSCRIPTIONRESPONSE_PB_H').
 -define('COMMANDENDTXNONSUBSCRIPTIONRESPONSE_PB_H', true).
 -record('CommandEndTxnOnSubscriptionResponse',
-        {request_id             :: non_neg_integer(), % = 1, 32 bits
-         txnid_least_bits = 0   :: non_neg_integer() | undefined, % = 2, 32 bits
-         txnid_most_bits = 0    :: non_neg_integer() | undefined, % = 3, 32 bits
-         error                  :: 'UnknownError' | 'MetadataError' | 'PersistenceError' | 'AuthenticationError' | 'AuthorizationError' | 'ConsumerBusy' | 'ServiceNotReady' | 'ProducerBlockedQuotaExceededError' | 'ProducerBlockedQuotaExceededException' | 'ChecksumError' | 'UnsupportedVersionError' | 'TopicNotFound' | 'SubscriptionNotFound' | 'ConsumerNotFound' | 'TooManyRequests' | 'TopicTerminatedError' | 'ProducerBusy' | 'InvalidTopicName' | 'IncompatibleSchema' | 'ConsumerAssignError' | 'TransactionCoordinatorNotFound' | 'InvalidTxnStatus' | integer() | undefined, % = 4, enum ServerError
-         message                :: iodata() | undefined % = 5
-        }).
+{request_id :: non_neg_integer(), % = 1, 32 bits
+  txnid_least_bits = 0 :: non_neg_integer() | undefined, % = 2, 32 bits
+  txnid_most_bits = 0 :: non_neg_integer() | undefined, % = 3, 32 bits
+  error :: 'UnknownError' | 'MetadataError' | 'PersistenceError' | 'AuthenticationError' | 'AuthorizationError' | 'ConsumerBusy' | 'ServiceNotReady' | 'ProducerBlockedQuotaExceededError' | 'ProducerBlockedQuotaExceededException' | 'ChecksumError' | 'UnsupportedVersionError' | 'TopicNotFound' | 'SubscriptionNotFound' | 'ConsumerNotFound' | 'TooManyRequests' | 'TopicTerminatedError' | 'ProducerBusy' | 'InvalidTopicName' | 'IncompatibleSchema' | 'ConsumerAssignError' | 'TransactionCoordinatorNotFound' | 'InvalidTxnStatus' | integer() | undefined, % = 4, enum ServerError
+  message :: iodata() | undefined % = 5
+}).
 -endif.
 
 -ifndef('BASECOMMAND_PB_H').
 -define('BASECOMMAND_PB_H', true).
 -record('BaseCommand',
-        {type                   :: 'CONNECT' | 'CONNECTED' | 'SUBSCRIBE' | 'PRODUCER' | 'SEND' | 'SEND_RECEIPT' | 'SEND_ERROR' | 'MESSAGE' | 'ACK' | 'FLOW' | 'UNSUBSCRIBE' | 'SUCCESS' | 'ERROR' | 'CLOSE_PRODUCER' | 'CLOSE_CONSUMER' | 'PRODUCER_SUCCESS' | 'PING' | 'PONG' | 'REDELIVER_UNACKNOWLEDGED_MESSAGES' | 'PARTITIONED_METADATA' | 'PARTITIONED_METADATA_RESPONSE' | 'LOOKUP' | 'LOOKUP_RESPONSE' | 'CONSUMER_STATS' | 'CONSUMER_STATS_RESPONSE' | 'REACHED_END_OF_TOPIC' | 'SEEK' | 'GET_LAST_MESSAGE_ID' | 'GET_LAST_MESSAGE_ID_RESPONSE' | 'ACTIVE_CONSUMER_CHANGE' | 'GET_TOPICS_OF_NAMESPACE' | 'GET_TOPICS_OF_NAMESPACE_RESPONSE' | 'GET_SCHEMA' | 'GET_SCHEMA_RESPONSE' | 'AUTH_CHALLENGE' | 'AUTH_RESPONSE' | 'ACK_RESPONSE' | 'GET_OR_CREATE_SCHEMA' | 'GET_OR_CREATE_SCHEMA_RESPONSE' | 'NEW_TXN' | 'NEW_TXN_RESPONSE' | 'ADD_PARTITION_TO_TXN' | 'ADD_PARTITION_TO_TXN_RESPONSE' | 'ADD_SUBSCRIPTION_TO_TXN' | 'ADD_SUBSCRIPTION_TO_TXN_RESPONSE' | 'END_TXN' | 'END_TXN_RESPONSE' | 'END_TXN_ON_PARTITION' | 'END_TXN_ON_PARTITION_RESPONSE' | 'END_TXN_ON_SUBSCRIPTION' | 'END_TXN_ON_SUBSCRIPTION_RESPONSE' | integer(), % = 1, enum BaseCommand.Type
-         connect                :: pulsar_api:'CommandConnect'() | undefined, % = 2
-         connected              :: pulsar_api:'CommandConnected'() | undefined, % = 3
-         subscribe              :: pulsar_api:'CommandSubscribe'() | undefined, % = 4
-         producer               :: pulsar_api:'CommandProducer'() | undefined, % = 5
-         send                   :: pulsar_api:'CommandSend'() | undefined, % = 6
-         send_receipt           :: pulsar_api:'CommandSendReceipt'() | undefined, % = 7
-         send_error             :: pulsar_api:'CommandSendError'() | undefined, % = 8
-         message                :: pulsar_api:'CommandMessage'() | undefined, % = 9
-         ack                    :: pulsar_api:'CommandAck'() | undefined, % = 10
-         flow                   :: pulsar_api:'CommandFlow'() | undefined, % = 11
-         unsubscribe            :: pulsar_api:'CommandUnsubscribe'() | undefined, % = 12
-         success                :: pulsar_api:'CommandSuccess'() | undefined, % = 13
-         error                  :: pulsar_api:'CommandError'() | undefined, % = 14
-         close_producer         :: pulsar_api:'CommandCloseProducer'() | undefined, % = 15
-         close_consumer         :: pulsar_api:'CommandCloseConsumer'() | undefined, % = 16
-         producer_success       :: pulsar_api:'CommandProducerSuccess'() | undefined, % = 17
-         ping                   :: pulsar_api:'CommandPing'() | undefined, % = 18
-         pong                   :: pulsar_api:'CommandPong'() | undefined, % = 19
-         redeliverUnacknowledgedMessages :: pulsar_api:'CommandRedeliverUnacknowledgedMessages'() | undefined, % = 20
-         partitionMetadata      :: pulsar_api:'CommandPartitionedTopicMetadata'() | undefined, % = 21
-         partitionMetadataResponse :: pulsar_api:'CommandPartitionedTopicMetadataResponse'() | undefined, % = 22
-         lookupTopic            :: pulsar_api:'CommandLookupTopic'() | undefined, % = 23
-         lookupTopicResponse    :: pulsar_api:'CommandLookupTopicResponse'() | undefined, % = 24
-         consumerStats          :: pulsar_api:'CommandConsumerStats'() | undefined, % = 25
-         consumerStatsResponse  :: pulsar_api:'CommandConsumerStatsResponse'() | undefined, % = 26
-         reachedEndOfTopic      :: pulsar_api:'CommandReachedEndOfTopic'() | undefined, % = 27
-         seek                   :: pulsar_api:'CommandSeek'() | undefined, % = 28
-         getLastMessageId       :: pulsar_api:'CommandGetLastMessageId'() | undefined, % = 29
-         getLastMessageIdResponse :: pulsar_api:'CommandGetLastMessageIdResponse'() | undefined, % = 30
-         active_consumer_change :: pulsar_api:'CommandActiveConsumerChange'() | undefined, % = 31
-         getTopicsOfNamespace   :: pulsar_api:'CommandGetTopicsOfNamespace'() | undefined, % = 32
-         getTopicsOfNamespaceResponse :: pulsar_api:'CommandGetTopicsOfNamespaceResponse'() | undefined, % = 33
-         getSchema              :: pulsar_api:'CommandGetSchema'() | undefined, % = 34
-         getSchemaResponse      :: pulsar_api:'CommandGetSchemaResponse'() | undefined, % = 35
-         authChallenge          :: pulsar_api:'CommandAuthChallenge'() | undefined, % = 36
-         authResponse           :: pulsar_api:'CommandAuthResponse'() | undefined, % = 37
-         ackResponse            :: pulsar_api:'CommandAckResponse'() | undefined, % = 38
-         getOrCreateSchema      :: pulsar_api:'CommandGetOrCreateSchema'() | undefined, % = 39
-         getOrCreateSchemaResponse :: pulsar_api:'CommandGetOrCreateSchemaResponse'() | undefined, % = 40
-         newTxn                 :: pulsar_api:'CommandNewTxn'() | undefined, % = 50
-         newTxnResponse         :: pulsar_api:'CommandNewTxnResponse'() | undefined, % = 51
-         addPartitionToTxn      :: pulsar_api:'CommandAddPartitionToTxn'() | undefined, % = 52
-         addPartitionToTxnResponse :: pulsar_api:'CommandAddPartitionToTxnResponse'() | undefined, % = 53
-         addSubscriptionToTxn   :: pulsar_api:'CommandAddSubscriptionToTxn'() | undefined, % = 54
-         addSubscriptionToTxnResponse :: pulsar_api:'CommandAddSubscriptionToTxnResponse'() | undefined, % = 55
-         endTxn                 :: pulsar_api:'CommandEndTxn'() | undefined, % = 56
-         endTxnResponse         :: pulsar_api:'CommandEndTxnResponse'() | undefined, % = 57
-         endTxnOnPartition      :: pulsar_api:'CommandEndTxnOnPartition'() | undefined, % = 58
-         endTxnOnPartitionResponse :: pulsar_api:'CommandEndTxnOnPartitionResponse'() | undefined, % = 59
-         endTxnOnSubscription   :: pulsar_api:'CommandEndTxnOnSubscription'() | undefined, % = 60
-         endTxnOnSubscriptionResponse :: pulsar_api:'CommandEndTxnOnSubscriptionResponse'() | undefined % = 61
-        }).
+{type :: 'CONNECT' | 'CONNECTED' | 'SUBSCRIBE' | 'PRODUCER' | 'SEND' | 'SEND_RECEIPT' | 'SEND_ERROR' | 'MESSAGE' | 'ACK' | 'FLOW' | 'UNSUBSCRIBE' | 'SUCCESS' | 'ERROR' | 'CLOSE_PRODUCER' | 'CLOSE_CONSUMER' | 'PRODUCER_SUCCESS' | 'PING' | 'PONG' | 'REDELIVER_UNACKNOWLEDGED_MESSAGES' | 'PARTITIONED_METADATA' | 'PARTITIONED_METADATA_RESPONSE' | 'LOOKUP' | 'LOOKUP_RESPONSE' | 'CONSUMER_STATS' | 'CONSUMER_STATS_RESPONSE' | 'REACHED_END_OF_TOPIC' | 'SEEK' | 'GET_LAST_MESSAGE_ID' | 'GET_LAST_MESSAGE_ID_RESPONSE' | 'ACTIVE_CONSUMER_CHANGE' | 'GET_TOPICS_OF_NAMESPACE' | 'GET_TOPICS_OF_NAMESPACE_RESPONSE' | 'GET_SCHEMA' | 'GET_SCHEMA_RESPONSE' | 'AUTH_CHALLENGE' | 'AUTH_RESPONSE' | 'ACK_RESPONSE' | 'GET_OR_CREATE_SCHEMA' | 'GET_OR_CREATE_SCHEMA_RESPONSE' | 'NEW_TXN' | 'NEW_TXN_RESPONSE' | 'ADD_PARTITION_TO_TXN' | 'ADD_PARTITION_TO_TXN_RESPONSE' | 'ADD_SUBSCRIPTION_TO_TXN' | 'ADD_SUBSCRIPTION_TO_TXN_RESPONSE' | 'END_TXN' | 'END_TXN_RESPONSE' | 'END_TXN_ON_PARTITION' | 'END_TXN_ON_PARTITION_RESPONSE' | 'END_TXN_ON_SUBSCRIPTION' | 'END_TXN_ON_SUBSCRIPTION_RESPONSE' | integer(), % = 1, enum BaseCommand.Type
+  connect :: pulsar_api:'CommandConnect'() | undefined, % = 2
+  connected :: pulsar_api:'CommandConnected'() | undefined, % = 3
+  subscribe :: pulsar_api:'CommandSubscribe'() | undefined, % = 4
+  producer :: pulsar_api:'CommandProducer'() | undefined, % = 5
+  send :: pulsar_api:'CommandSend'() | undefined, % = 6
+  send_receipt :: pulsar_api:'CommandSendReceipt'() | undefined, % = 7
+  send_error :: pulsar_api:'CommandSendError'() | undefined, % = 8
+  message :: pulsar_api:'CommandMessage'() | undefined, % = 9
+  ack :: pulsar_api:'CommandAck'() | undefined, % = 10
+  flow :: pulsar_api:'CommandFlow'() | undefined, % = 11
+  unsubscribe :: pulsar_api:'CommandUnsubscribe'() | undefined, % = 12
+  success :: pulsar_api:'CommandSuccess'() | undefined, % = 13
+  error :: pulsar_api:'CommandError'() | undefined, % = 14
+  close_producer :: pulsar_api:'CommandCloseProducer'() | undefined, % = 15
+  close_consumer :: pulsar_api:'CommandCloseConsumer'() | undefined, % = 16
+  producer_success :: pulsar_api:'CommandProducerSuccess'() | undefined, % = 17
+  ping :: pulsar_api:'CommandPing'() | undefined, % = 18
+  pong :: pulsar_api:'CommandPong'() | undefined, % = 19
+  redeliverUnacknowledgedMessages :: pulsar_api:'CommandRedeliverUnacknowledgedMessages'() | undefined, % = 20
+  partitionMetadata :: pulsar_api:'CommandPartitionedTopicMetadata'() | undefined, % = 21
+  partitionMetadataResponse :: pulsar_api:'CommandPartitionedTopicMetadataResponse'() | undefined, % = 22
+  lookupTopic :: pulsar_api:'CommandLookupTopic'() | undefined, % = 23
+  lookupTopicResponse :: pulsar_api:'CommandLookupTopicResponse'() | undefined, % = 24
+  consumerStats :: pulsar_api:'CommandConsumerStats'() | undefined, % = 25
+  consumerStatsResponse :: pulsar_api:'CommandConsumerStatsResponse'() | undefined, % = 26
+  reachedEndOfTopic :: pulsar_api:'CommandReachedEndOfTopic'() | undefined, % = 27
+  seek :: pulsar_api:'CommandSeek'() | undefined, % = 28
+  getLastMessageId :: pulsar_api:'CommandGetLastMessageId'() | undefined, % = 29
+  getLastMessageIdResponse :: pulsar_api:'CommandGetLastMessageIdResponse'() | undefined, % = 30
+  active_consumer_change :: pulsar_api:'CommandActiveConsumerChange'() | undefined, % = 31
+  getTopicsOfNamespace :: pulsar_api:'CommandGetTopicsOfNamespace'() | undefined, % = 32
+  getTopicsOfNamespaceResponse :: pulsar_api:'CommandGetTopicsOfNamespaceResponse'() | undefined, % = 33
+  getSchema :: pulsar_api:'CommandGetSchema'() | undefined, % = 34
+  getSchemaResponse :: pulsar_api:'CommandGetSchemaResponse'() | undefined, % = 35
+  authChallenge :: pulsar_api:'CommandAuthChallenge'() | undefined, % = 36
+  authResponse :: pulsar_api:'CommandAuthResponse'() | undefined, % = 37
+  ackResponse :: pulsar_api:'CommandAckResponse'() | undefined, % = 38
+  getOrCreateSchema :: pulsar_api:'CommandGetOrCreateSchema'() | undefined, % = 39
+  getOrCreateSchemaResponse :: pulsar_api:'CommandGetOrCreateSchemaResponse'() | undefined, % = 40
+  newTxn :: pulsar_api:'CommandNewTxn'() | undefined, % = 50
+  newTxnResponse :: pulsar_api:'CommandNewTxnResponse'() | undefined, % = 51
+  addPartitionToTxn :: pulsar_api:'CommandAddPartitionToTxn'() | undefined, % = 52
+  addPartitionToTxnResponse :: pulsar_api:'CommandAddPartitionToTxnResponse'() | undefined, % = 53
+  addSubscriptionToTxn :: pulsar_api:'CommandAddSubscriptionToTxn'() | undefined, % = 54
+  addSubscriptionToTxnResponse :: pulsar_api:'CommandAddSubscriptionToTxnResponse'() | undefined, % = 55
+  endTxn :: pulsar_api:'CommandEndTxn'() | undefined, % = 56
+  endTxnResponse :: pulsar_api:'CommandEndTxnResponse'() | undefined, % = 57
+  endTxnOnPartition :: pulsar_api:'CommandEndTxnOnPartition'() | undefined, % = 58
+  endTxnOnPartitionResponse :: pulsar_api:'CommandEndTxnOnPartitionResponse'() | undefined, % = 59
+  endTxnOnSubscription :: pulsar_api:'CommandEndTxnOnSubscription'() | undefined, % = 60
+  endTxnOnSubscriptionResponse :: pulsar_api:'CommandEndTxnOnSubscriptionResponse'() | undefined % = 61
+}).
 -endif.
 
 -endif.

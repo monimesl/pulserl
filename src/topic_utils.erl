@@ -14,6 +14,8 @@
   new_partition/2, partition_str/2, partition_of/2, is_persistent/1]).
 
 
+parse(#topic{} = Topic) ->
+  Topic;
 parse(CompleteName) when is_list(CompleteName) ->
   parse(iolist_to_binary(CompleteName));
 
