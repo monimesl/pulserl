@@ -27,14 +27,14 @@
 -export([send/3, sync_send/3, new_message/1, new_message/2, new_message/3, new_message/4, new_message/5]).
 
 -define(STATE_READY, ready).
--define(CALL_TIMEOUT, 300000).
+-define(CALL_TIMEOUT, 180000).
 -define(INFO_SEND_BATCH, send_batch).
 -define(INFO_ACK_TIMEOUT, ack_timeout).
 -define(INFO_REINITIALIZE, try_reinitialize).
--define(ERROR_SEND_TIMEOUT, {error, send_timeout}).
 -define(ERROR_PRODUCER_DOWN, {error, producer_down}).
 -define(ERROR_PRODUCER_CLOSED, {error, producer_closed}).
--define(ERROR_PRODUCER_NOT_READY, {error, producer_not_ready}).
+-define(ERROR_PRODUCER_UNREADY, {error, producer_unready}).
+-define(ERROR_SEND_TIMEOUT, {error, producer_send_timeout}).
 -define(ERROR_PRODUCER_QUEUE_IS_FULL, {error, producer_queue_full}).
 
 -define(SINGLE_ROUTING, single_routing).
@@ -115,7 +115,7 @@ send(Pid, #prodMessage{} = Message, Callback) when is_pid(Pid) ->
 %%--------------------------------------------------------------------
 %% @doc Send a message synchronously
 %%--------------------------------------------------------------------
--spec(sync_send(Pid :: pid(), Message :: #prodMessage{}, Timeout :: pos_integer()) ->
+-spec(sync_send(Pid :: pid(), Message :: #prodMessage{}, Timeout :: ?UNDEF | pos_integer()) ->
   #messageId{} | {error, Reason :: term()}).
 sync_send(Pid, #prodMessage{} = Message, Timeout) when is_pid(Pid)
   andalso (is_integer(Timeout) orelse Timeout == ?UNDEF) ->
@@ -243,7 +243,7 @@ init([#topic{} = Topic, Opts]) ->
 
 handle_call(_, _From, #state{state = ?UNDEF} = State) ->
   %% I'm not ready yet
-  {reply, ?ERROR_PRODUCER_NOT_READY, State};
+  {reply, ?ERROR_PRODUCER_UNREADY, State};
 
 %% The parent
 handle_call({send_message, _ClientFrom, #prodMessage{key = Key}}, _From,
@@ -256,7 +256,7 @@ handle_call({send_message, _ClientFrom, #prodMessage{key = Key}}, _From,
       {{ok, Pid}, State2} ->
         {{redirect, Pid}, State2};
       {_, State2} ->
-        {?ERROR_PRODUCER_NOT_READY, State2}
+        {?ERROR_PRODUCER_UNREADY, State2}
     end,
   {reply, Replay, State3};
 
@@ -409,12 +409,13 @@ choose_partition_producer(Key,
   {Partition, State2} =
     case State#state.partition_routing_mode of
       {M, F} ->
-        Int = erlang:apply(M, F, [Key, PartitionCount]),
-        if (is_integer(Int) andalso Int >= 0 andalso Int < PartitionCount) ->
-          {Int, State};
-          true ->
-            error_logger:error_msg("The custom router mode: ~p produces invalid valid: ~p. "
-            "It mut return an integer in the range: [0, ~p)", [{M, F}, PartitionCount]),
+        case catch erlang:apply(M, F, [Key, PartitionCount]) of
+          Int when is_integer(Int) andalso Int >= 0 andalso Int < PartitionCount ->
+            {Int, State};
+          Other ->
+            error_logger:error_msg("The custom router mode: ~p produces invalid result: ~p. "
+            "It must return an integer in the range: [0, ~p). Resorting to random routing",
+              [{M, F}, Other]),
             {rand:uniform(PartitionCount) - 1, State}
         end;
       Mode ->

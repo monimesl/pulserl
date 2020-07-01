@@ -27,7 +27,6 @@
   terminate/2,
   code_change/3]).
 
--define(STATE_READY, ready).
 
 %% Initial Positions
 -define(POS_LATEST, latest).
@@ -48,10 +47,9 @@
 
 %% Error Replies
 -define(ERROR_CONSUMER_CLOSED, {error, consumer_closed}).
--define(ERROR_CONSUMER_NOT_READY, {error, consumer_not_ready}).
--define(ERROR_CONSUMER_ID_NOT_KNOWN_HERE, {error, id_not_known_here}).
--define(ERROR_CONSUMER_NOT_FROM_PARTITIONED_TOPIC, {error, id_not_from_partitioned_topic}).
--define(ERROR_CONSUMER_CUMULATIVE_ACK_INVALID, {error, <<"Cannot use cumulative ack with shared subscription type">>}).
+-define(ERROR_CONSUMER_UNREADY, {error, consumer_unready}).
+-define(ERROR_ACK_ID_NOT_EXPECTED, {error, consumer_ack_id_not_expected}).
+-define(ERROR_ACK_TYPE_NOT_ALLOWED, {error, consumer_ack_type_not_allowed}).
 
 receive_message(Pid) ->
   case gen_server:call(Pid, ?RECEIVE_MESSAGE) of
@@ -118,6 +116,9 @@ receive_from_any([Child | Rest]) ->
 
 send_message_to_dead_letter(Pid, Message) ->
   gen_server:call(Pid, {send_to_dead_letter_topic, Message}).
+
+
+-define(STATE_READY, ready).
 
 -record(state, {
   state,
@@ -229,17 +230,17 @@ init([#topic{} = Topic, Opts]) ->
 
 handle_call(_, _From, #state{state = ?UNDEF} = State) ->
   %% I'm not ready yet
-  {reply, ?ERROR_CONSUMER_NOT_READY, State};
+  {reply, ?ERROR_CONSUMER_UNREADY, State};
 
 handle_call({acknowledge, _, true}, _From, #state{consumer_subscription_type = ?SHARED_SUBSCRIPTION} = State) ->
-  {reply, ?ERROR_CONSUMER_CUMULATIVE_ACK_INVALID, State};
+  {reply, ?ERROR_ACK_TYPE_NOT_ALLOWED, State};
 
 %% The parent
 handle_call({acknowledge, #messageId{topic = Topic} = MsgId, _Cumulative},
     _From, #state{parent_consumer = ?UNDEF, partition_count = Pc, topic = ParentTopic} = State) when Pc > 0 ->
   case topic_utils:partition_of(ParentTopic, Topic) of
     false ->
-      {reply, ?ERROR_CONSUMER_ID_NOT_KNOWN_HERE, State};
+      {reply, ?ERROR_ACK_ID_NOT_EXPECTED, State};
     _ ->
       {Reply, State2} = redirect_to_the_child_partition(MsgId, State),
       {reply, Reply, State2}
@@ -249,7 +250,7 @@ handle_call({acknowledge, #messageId{topic = Topic} = MsgId, _Cumulative},
 handle_call({acknowledge, #messageId{topic = TopicStr} = MsgId, Cumulative}, _From, #state{topic = Topic} = State) ->
   case TopicStr == topic_utils:to_string(Topic) of
     false ->
-      {reply, ?ERROR_CONSUMER_ID_NOT_KNOWN_HERE, State};
+      {reply, ?ERROR_ACK_ID_NOT_EXPECTED, State};
     _ ->
       case topic_utils:is_persistent(Topic) of
         true ->
@@ -265,7 +266,7 @@ handle_call({negative_acknowledge, #messageId{topic = Topic} = MsgId},
     _From, #state{parent_consumer = ?UNDEF, partition_count = Pc, topic = ParentTopic} = State) when Pc > 0 ->
   case topic_utils:partition_of(ParentTopic, Topic) of
     false ->
-      {reply, ?ERROR_CONSUMER_ID_NOT_KNOWN_HERE, State};
+      {reply, ?ERROR_ACK_ID_NOT_EXPECTED, State};
     _ ->
       {Reply, State2} = redirect_to_the_child_partition(MsgId, State),
       {reply, Reply, State2}
@@ -275,7 +276,7 @@ handle_call({negative_acknowledge, #messageId{topic = Topic} = MsgId},
 handle_call({negative_acknowledge, #messageId{topic = TopicStr} = MsgId}, _From, #state{topic = Topic} = State) ->
   case TopicStr == topic_utils:to_string(Topic) of
     false ->
-      {reply, ?ERROR_CONSUMER_ID_NOT_KNOWN_HERE, State};
+      {reply, ?ERROR_ACK_ID_NOT_EXPECTED, State};
     _ ->
       {reply, ok, handle_negative_acknowledgement(MsgId, State)}
   end;
@@ -288,7 +289,7 @@ handle_call(?RECEIVE_MESSAGE, _From,
   {Replay, State3} =
     case partition_consumers_to_poll(?UNDEF, State) of
       {[], State2} ->
-        {?ERROR_CONSUMER_NOT_READY, State2};
+        {?ERROR_CONSUMER_UNREADY, State2};
       {Pids, State2} ->
         {{redirect, Pids}, State2}
     end,
@@ -496,7 +497,7 @@ redirect_to_the_child_partition(#messageId{partition = Partition}, State) ->
     {ok, Pid} ->
       {{redirect, Pid}, State};
     _ ->
-      {?ERROR_CONSUMER_NOT_READY, State}
+      {?ERROR_CONSUMER_UNREADY, State}
   end.
 
 handle_negative_acknowledgement(#messageId{} = MsgId,
