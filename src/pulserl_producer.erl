@@ -23,8 +23,8 @@
   code_change/3]).
 
 %% Producer API
--export([create/2, close/1, close/2]).
--export([send/3, sync_send/3, new_message/1, new_message/2, new_message/3, new_message/4, new_message/5]).
+-export([create/2, close/1, close/2, send/3, sync_send/3]).
+-export([new_message/1, new_message/2, new_message/3, new_message/4, new_message/5]).
 
 -define(STATE_READY, ready).
 -define(CALL_TIMEOUT, 180000).
@@ -87,7 +87,8 @@ new_message(Key, Value, Properties, EventTime, DeliverAtTime) ->
 %%--------------------------------------------------------------------
 %% @doc Send a message asynchronously
 %%--------------------------------------------------------------------
-send(Pid, #prodMessage{} = Message, Callback) when is_pid(Pid) ->
+send(Pid, #prodMessage{} = Message, Callback)
+  when is_pid(Pid) andalso (is_function(Callback) orelse Callback == ?UNDEF) ->
   {CallerFun, CallReturn} =
     if is_function(Callback) ->
       {fun() -> gen_server:call(Pid, {send_message, Callback, Message}, ?CALL_TIMEOUT) end, ok};
@@ -420,7 +421,7 @@ choose_partition_producer(Key,
         end;
       Mode ->
         if is_binary(Key) ->
-          {pulserl_utils:hash_key(Key, PartitionCount), State};
+          {pulserl_utils:hash(Key, PartitionCount), State};
           true ->
             Part = State#state.partition_to_route_to,
             case Mode of

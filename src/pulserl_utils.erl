@@ -14,7 +14,7 @@
 -export([new_message_id/2, new_message_id/4, new_message/5, new_message/6]).
 
 %% API
--export([tls_enable/1, hash_key/2, get_int_env/2, get_env/2, resolve_uri/2, to_logical_address/3, sock_address_to_string/2, logical_to_physical_addresses/2]).
+-export([tls_enable/1, hash/2, get_int_env/2, get_env/2, resolve_uri/2, to_logical_address/3, sock_address_to_string/2, logical_to_physical_addresses/2]).
 
 tls_enable(ServiceUrl) when is_binary(ServiceUrl) ->
   tls_enable(binary_to_list(ServiceUrl));
@@ -76,13 +76,14 @@ new_message(Topic, MessageId, #'MessageMetadata'{} = Meta, #'SingleMessageMetada
     end,
   Message2#consMessage{metadata = Metadata2}.
 
+hash(Key, ExclusiveUpperBound) when is_list(Key) ->
+  hash(iolist_to_binary(Key), ExclusiveUpperBound);
 
-hash_key(?UNDEF, Divisor) ->
-  hash_key(<<>>, Divisor);
-hash_key(<<>>, Divisor) ->
-  rand:uniform(Divisor) - 1;
-hash_key(Key, Divisor) ->
-  erlang:abs(crc32cer:nif(Key)) rem Divisor.
+hash(Key, ExclusiveUpperBound)
+  when is_binary(Key)
+  andalso is_integer(ExclusiveUpperBound)
+  andalso ExclusiveUpperBound >= 1 ->
+  erlang:phash2(Key, ExclusiveUpperBound).
 
 sock_address_to_string(Ip, Port) ->
   inet:ntoa(Ip) ++ ":" ++ integer_to_list(Port).
