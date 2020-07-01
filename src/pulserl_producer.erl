@@ -415,7 +415,7 @@ choose_partition_producer(Key,
           Other ->
             error_logger:error_msg("The custom router mode: ~p produces invalid result: ~p. "
             "It must return an integer in the range: [0, ~p). Resorting to random routing",
-              [{M, F}, Other]),
+              [{M, F}, Other, PartitionCount]),
             {rand:uniform(PartitionCount) - 1, State}
         end;
       Mode ->
