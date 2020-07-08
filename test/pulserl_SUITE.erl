@@ -1,5 +1,7 @@
 -module(pulserl_SUITE).
 
+-author("Stanislav Sabudaye").
+
 -export([suite/0, init_per_suite/1, end_per_suite/1, groups/0, all/0]).
 -export([pulserl_produce_consume_test/1]).
 

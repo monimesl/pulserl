@@ -1,5 +1,5 @@
 %%%-------------------------------------------------------------------
-%%% @author Alpha Umaru Shaw <shawalpha5@gmail.com>
+%%% @author Alpha Umaru Shaw <shawalpha5@gmail.com>, 
 %%% @doc
 %%%
 %%% @end
@@ -7,7 +7,10 @@
 %%% Copyright: (C) 2020
 %%%-------------------------------------------------------------------
 -module(consumer_SUITE).
+
 -author("Alpha Umaru Shaw").
+-author("Stanislav Sabudaye").
+
 -export([suite/0, init_per_suite/1, end_per_suite/1, groups/0, all/0]).
 -export([receive_message_test/1, seek_test/1]).
 -include_lib("common_test/include/ct.hrl").

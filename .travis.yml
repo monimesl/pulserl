@@ -1,3 +1,6 @@
+
+#authors: [Alpha Umaru Shaw, Stanislav Sabudaye]
+
 sudo: required
 language: erlang
 notifications:
