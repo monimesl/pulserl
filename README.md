@@ -118,7 +118,7 @@ end
 ```erlang
 [
   {pulserl, [
-    {autostart, true} %% If false, the client will be created on startup. Default is true.
+    {autostart, true} %% If true, the client will be created on startup. Default is true.
     %% The TCP connect timeout in milliseconds. Default is 30000.
     , {connect_timeout_ms, 30000}
     %% The maximum connections to each broker the client should create.
