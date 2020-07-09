@@ -84,13 +84,13 @@ start_producer(Topic, Options) ->
 %% @doc publish a message asynchronously
 %%--------------------------------------------------------------------
 produce(PidOrTopic, Value) when not is_record(Value, prodMessage) ->
-  produce(PidOrTopic, pulserl_producer:new_message(Value), undefined);
+  produce(PidOrTopic, pulserl_producer:new_message(Value), ?UNDEF);
 
 %%--------------------------------------------------------------------
 %% @doc publish a message asynchronously
 %%--------------------------------------------------------------------
 produce(PidOrTopic, Message) ->
-  produce(PidOrTopic, Message, undefined).
+  produce(PidOrTopic, Message, ?UNDEF).
 
 %%--------------------------------------------------------------------
 %% @doc publish a message asynchronously
@@ -194,7 +194,7 @@ negative_ack(#consMessage{consumer = Pid, id = Id}) ->
   pulserl:negative_ack(Pid, Id).
 
 negative_ack(Pid, #messageId{} = Id) when is_pid(Pid) ->
-  pulserl_consumer:nack(Pid, Id).
+  pulserl_consumer:negative_ack(Pid, Id).
 
 %%--------------------------------------------------------------------
 %% @doc

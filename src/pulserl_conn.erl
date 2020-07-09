@@ -143,7 +143,7 @@ handle_call({send_command, PulsarCommand}, From, State) ->
     {reply, Reply, NewState} ->
       %% Ack now. It could be an error or a command that expects no response
       {reply, Reply, NewState};
-    {noreply, WaiterId, NewState} when WaiterId /= undefined ->
+    {noreply, WaiterId, NewState} when WaiterId /= ?UNDEF ->
       %% Track the request for later response
       {WaiterPid, _WaiterTag} = From,
       WaiterMonitorRef = erlang:monitor(process, WaiterPid),
@@ -354,7 +354,7 @@ fetch_consumer_by_id(ConsumerId, State, Callback) ->
     {ok, Consumer} ->
       Callback(Consumer);
     _ ->
-      Callback(undefined)
+      Callback(?UNDEF)
   end,
   State.
 
@@ -363,7 +363,7 @@ fetch_producer_by_id(ProducerId, State, Callback) ->
     {ok, Producer} ->
       Callback(Producer);
     _ ->
-      Callback(undefined)
+      Callback(?UNDEF)
   end,
   State.
 
@@ -401,7 +401,7 @@ send_pong_to_broker(#state{socket = Sock} = State) ->
   end.
 
 
-send_internal(_, #state{state = undefined, socket = undefined} = State) ->
+send_internal(_, #state{state = ?UNDEF, socket = ?UNDEF} = State) ->
   %% We haven't connected yet, It's very likely a reconnection is going on.
   %% We return error immediately to make sure our message queue is not
   %% overflowed and not to keep clients hanging almost indefinitely
@@ -582,7 +582,7 @@ notify_client_of_down(Error, #state{socket_address = SockAddr, socket = Socket} 
   erlang:send(pulserl_client, {connection_down, SockAddr, Socket, self()}),
   notify_parties(connection_down, dict:to_list(State#state.producers)),
   notify_parties(connection_down, dict:to_list(State#state.consumers)),
-  State#state{state = undefined, socket = undefined}.
+  State#state{state = ?UNDEF, socket = ?UNDEF}.
 
 notify_parties(ConnectionState, Parties) ->
   [safe_send(Pid, ConnectionState) || {_, Pid} <- Parties].

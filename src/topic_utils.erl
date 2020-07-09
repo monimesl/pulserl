@@ -16,26 +16,26 @@
 
 parse(#topic{} = Topic) ->
   Topic;
-parse(CompleteName) when is_list(CompleteName) ->
-  parse(iolist_to_binary(CompleteName));
+parse(Topic) when is_list(Topic) ->
+  parse(iolist_to_binary(Topic));
 
-parse(Name) when is_binary(Name) ->
-  CompleteName =
-    case binary:match(Name, [<<"://">>]) of
+parse(Topic) when is_binary(Topic) ->
+  TopicName =
+    case binary:match(Topic, [<<"://">>]) of
       nomatch ->
-        case binary:split(Name, <<"/">>, [global]) of
+        case binary:split(Topic, <<"/">>, [global]) of
           [_Namespace, _Name] ->
-            iolist_to_binary([?PERSISTENT_DOMAIN, "://", ?PUBLIC_TENANT, "/", Name]);
+            iolist_to_binary([?PERSISTENT_DOMAIN, "://", ?PUBLIC_TENANT, "/", Topic]);
           [_Tenant, _Namespace | _Name] ->
-            iolist_to_binary([?PERSISTENT_DOMAIN, "://", Name]);
+            iolist_to_binary([?PERSISTENT_DOMAIN, "://", Topic]);
           [_Name] ->
-            iolist_to_binary([?PERSISTENT_DOMAIN, "://", ?PUBLIC_TENANT, "/", ?DEFAULT_NAMESPACE, "/", Name]);
+            iolist_to_binary([?PERSISTENT_DOMAIN, "://", ?PUBLIC_TENANT, "/", ?DEFAULT_NAMESPACE, "/", Topic]);
           _ -> error({bad_topic_name, "Name must be in the format <topic>, or "
-          "[<tenant>/]<namespace>/<topic>"}, [Name])
+          "[<tenant>/]<namespace>/<topic>"}, [Topic])
         end;
-      _ -> Name
+      _ -> Topic
     end,
-  case binary:split(CompleteName, <<"://">>) of
+  case binary:split(TopicName, <<"://">>) of
     [Domain, Rest] ->
       case binary:split(Rest, <<"/">>, [global]) of
         [Namespace, LocalName] ->
@@ -45,9 +45,9 @@ parse(Name) when is_binary(Name) ->
           #topic{domain = Domain, tenant = Tenant,
             namespace = Namespace, local = iolist_to_binary(join(LocalName, <<"/">>))};
         _ ->
-          error(bad_topic_name, [CompleteName])
+          error(bad_topic_name, [TopicName])
       end;
-    _ -> error(bad_topic_name, [CompleteName])
+    _ -> error(bad_topic_name, [TopicName])
   end.
 
 partition_of(#topic{} = Parent, PartitionTopic) when is_binary(PartitionTopic) ->

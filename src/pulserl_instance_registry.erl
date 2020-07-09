@@ -76,8 +76,8 @@ handle_call({new_consumer, Topic, Options}, _From, State) ->
           Other
       end,
       {reply, Reply, State};
-    Prods ->
-      {_, Pid} = erlwater_collection:random_select(Prods),
+    Consumers ->
+      {_, Pid} = erlwater_collection:random_select(Consumers),
       {reply, {ok, Pid}, State}
   end;
 
@@ -85,8 +85,8 @@ handle_call({new_producer, Topic, Options}, _From, State) ->
   case ets:lookup(pulserl_producers, topic_utils:to_string(Topic)) of
     [] ->
       {reply, pulserl:start_producer(Topic, Options), State};
-    Prods ->
-      {_, Pid} = erlwater_collection:random_select(Prods),
+    Producers ->
+      {_, Pid} = erlwater_collection:random_select(Producers),
       {reply, {ok, Pid}, State}
   end;
 
