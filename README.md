@@ -1,7 +1,7 @@
-[![Build Status](https://travis-ci.com/skulup/pulserl.svg?branch=master)](<https://travis-ci.com/skulup/pulserl>)
-[![Codacy Badge](https://api.codacy.com/project/badge/Grade/731f6fe6fa9442ce8b8d2b994a121d93)](<https://app.codacy.com/gh/skulup/pulserl?utm_source=github.com&utm_medium=referral&utm_content=skulup/pulserl&utm_campaign=Badge_Grade_Dashboard>)
-[![Language](https://img.shields.io/badge/Language-Erlang-b83998.svg)](<https://www.erlang.org/>)
-[![LICENSE](https://img.shields.io/badge/License-Apache%202-blue.svg)](<https://github.com/skulup/pulserl/blob/master/LICENSE>)
+[![Build Status](https://travis-ci.com/skulup/pulserl.svg?branch=master)](https://travis-ci.com/skulup/pulserl)
+[![Codacy Badge](https://api.codacy.com/project/badge/Grade/731f6fe6fa9442ce8b8d2b994a121d93)](https://app.codacy.com/gh/skulup/pulserl?utm_source=github.com&utm_medium=referral&utm_content=skulup/pulserl&utm_campaign=Badge_Grade_Dashboard)
+[![Language](https://img.shields.io/badge/Language-Erlang-b83998.svg)](https://www.erlang.org/)
+[![LICENSE](https://img.shields.io/badge/License-Apache%202-blue.svg)](https://github.com/skulup/pulserl/blob/master/LICENSE)
 # Pulserl 
 __An Apache Pulsar client for Erlang/Elixir__
 
@@ -9,7 +9,7 @@ __Version:__ 0.1.0
 
 Pulserl is an Erlang client for the Apache Pulsar Pub/Sub system with both producer and consumer
 implementations. It requires version __2.0+__ of Apache Pulsar and __18.0+__ of Erlang. 
-Pulserl uses the [binary protocol](<http://pulsar.apache.org/docs/en/develop-binary-protocol>)
+Pulserl uses the [binary protocol](http://pulsar.apache.org/docs/en/develop-binary-protocol)
 to interact with the Pulsar brokers and exposes a very simple API. 
 ## Quick Examples
 
@@ -54,37 +54,37 @@ In the Erlang shell
 
 ## Feature Matrix
 
--[x] [Basic Producer](<http://pulsar.apache.org/docs/en/concepts-messaging/#producers>)
--[x] [Basic Consumer](<http://pulsar.apache.org/docs/en/concepts-messaging/#consumers>)
--[x] [Partitioned topics](<http://pulsar.apache.org/docs/en/concepts-messaging/#partitioned-topics>)
--[x] [Batching](<http://pulsar.apache.org/docs/en/concepts-messaging/#batching>)
--[ ]  [Compression](<http://pulsar.apache.org/docs/en/concepts-messaging/#compression>)
--[x] [TLS](<https://pulsar.apache.org/docs/en/security-tls-transport/#tls-overview>)
--[ ] [Authentication (token, tls>)](<https://pulsar.apache.org/docs/en/security-overview/>)
--[ ] [Reader API](<https://pulsar.apache.org/docs/en/concepts-clients/#reader-interface>)
--[x] [Proxy Support (for Kubernetes>)](<http://pulsar.apache.org/docs/en/concepts-architecture-overview/#pulsar-proxy>)
--[x] [Effectively-Once](<https://pulsar.apache.org/docs/en/concepts-messaging/#deduplication-and-effectively-once-semantics>)
--[ ] [Schema](<https://pulsar.apache.org/docs/en/schema-get-started/>)
+-[x] [Basic Producer](http://pulsar.apache.org/docs/en/concepts-messaging/#producers)
+-[x] [Basic Consumer](http://pulsar.apache.org/docs/en/concepts-messaging/#consumers)
+-[x] [Partitioned topics](http://pulsar.apache.org/docs/en/concepts-messaging/#partitioned-topics)
+-[x] [Batching](http://pulsar.apache.org/docs/en/concepts-messaging/#batching)
+-[ ]  [Compression](http://pulsar.apache.org/docs/en/concepts-messaging/#compression)
+-[x] [TLS](https://pulsar.apache.org/docs/en/security-tls-transport/#tls-overview)
+-[ ] [Authentication (token, tls)](https://pulsar.apache.org/docs/en/security-overview/)
+-[ ] [Reader API](https://pulsar.apache.org/docs/en/concepts-clients/#reader-interface)
+-[x] [Proxy Support (for Kubernetes)](http://pulsar.apache.org/docs/en/concepts-architecture-overview/#pulsar-proxy)
+-[x] [Effectively-Once](https://pulsar.apache.org/docs/en/concepts-messaging/#deduplication-and-effectively-once-semantics)
+-[ ] [Schema](https://pulsar.apache.org/docs/en/schema-get-started/)
 -[x] Consumer seek
--[ ] [Multi-topics consumer](<https://pulsar.apache.org/docs/en/concepts-messaging/#multi-topic-subscriptions>)
--[ ] [Topics regex consumer](<https://github.com/apache/pulsar/wiki/PIP-13:-Subscribe-to-topics-represented-by-regular-expressions>)
--[ ] [Compacted topics](<https://pulsar.apache.org/docs/en/concepts-topic-compaction/#compaction>)
+-[ ] [Multi-topics consumer](https://pulsar.apache.org/docs/en/concepts-messaging/#multi-topic-subscriptions)
+-[ ] [Topics regex consumer](https://github.com/apache/pulsar/wiki/PIP-13:-Subscribe-to-topics-represented-by-regular-expressions)
+-[ ] [Compacted topics](https://pulsar.apache.org/docs/en/concepts-topic-compaction/#compaction)
 -[x] User defined properties producer/consumer
 -[ ] Reader hasMessageAvailable
--[ ] [Hostname verification](<https://pulsar.apache.org/docs/en/2.3.1/security-tls-transport/#hostname-verification>)
--[ ] [Multi Hosts Service Url support](<https://pulsar.apache.org/docs/en/admin-api-overview/#java-admin-client>)
--[x] [Key_shared](<https://pulsar.apache.org/docs/en/concepts-messaging/#key_shared>)
--[ ] key based batcher (didn't find a documentation>) ?
--[x] [Negative Acknowledge](<https://pulsar.apache.org/docs/en/concepts-messaging/#negative-acknowledgement>)
--[x] [Delayed Delivery Messages](<https://pulsar.apache.org/docs/en/concepts-messaging/#delayed-message-delivery>)
--[x] [Dead Letter Policy](<https://pulsar.apache.org/docs/en/concepts-messaging/#dead-letter-topic>)
--[ ] [Interceptors](<https://github.com/apache/pulsar/wiki/PIP-23:-Message-Tracing-By-Interceptors>)
+-[ ] [Hostname verification](https://pulsar.apache.org/docs/en/2.3.1/security-tls-transport/#hostname-verification)
+-[ ] [Multi Hosts Service Url support](https://pulsar.apache.org/docs/en/admin-api-overview/#java-admin-client)
+-[x] [Key_shared](https://pulsar.apache.org/docs/en/concepts-messaging/#key_shared)
+-[ ] key based batcher (didn't find a documentation) ?
+-[x] [Negative Acknowledge](https://pulsar.apache.org/docs/en/concepts-messaging/#negative-acknowledgement)
+-[x] [Delayed Delivery Messages](https://pulsar.apache.org/docs/en/concepts-messaging/#delayed-message-delivery)
+-[x] [Dead Letter Policy](https://pulsar.apache.org/docs/en/concepts-messaging/#dead-letter-topic)
+-[ ] [Interceptors](https://github.com/apache/pulsar/wiki/PIP-23:-Message-Tracing-By-Interceptors)
  
- _Thanks to Sabudaye for [this information](<https://github.com/skulup/pulserl/issues/2#issuecomment-616463542>)_
+ _Thanks to Sabudaye for [this information](https://github.com/skulup/pulserl/issues/2#issuecomment-616463542)_
  
 
 ## Installation
- [Pulserl is available in Hex](<https://hex.pm/packages/pulserl>) for easy installation by added it to your project dependencies.
+ [Pulserl is available in Hex](https://hex.pm/packages/pulserl) for easy installation by added it to your project dependencies.
 
 In your Erlang project's `rebar.config` 
  ```erlang
@@ -155,7 +155,7 @@ a parent producer under the `pulserl_producer_sup` supervision tree which in tur
 and manage `n` child producers. The parent producer serves as a facade to the internal producers.
 The parent monitor the child processes (internal partitioned producers) for resilience, 
 route client calls to one of the child processes using different 
-[routing modes](<https://pulsar.apache.org/docs/en/concepts-messaging/#routing-modes>). 
+[routing modes](https://pulsar.apache.org/docs/en/concepts-messaging/#routing-modes). 
 A producer during initialization is assigned a connection by the client based on its topic metadata.
 The producers uses a queueing mechanism on message sending. 
 Each send is internally a `gen_server.call/2` to the producer process. The caller is added to 
@@ -229,7 +229,7 @@ A sample start producer API code:
 
 ## Contribute 
 
-For issues, comments, recommendation or feedback please [do it here](<https://github.com/skulup/pulserl/issues>).
+For issues, comments, recommendation or feedback please [do it here](https://github.com/skulup/pulserl/issues).
 
 Contributions are highly welcome.
 
