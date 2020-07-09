@@ -1,3 +1,4 @@
+[![Codacy Badge](https://api.codacy.com/project/badge/Grade/731f6fe6fa9442ce8b8d2b994a121d93)](https://app.codacy.com/gh/skulup/pulserl?utm_source=github.com&utm_medium=referral&utm_content=skulup/pulserl&utm_campaign=Badge_Grade_Dashboard)
 [![Build Status](https://travis-ci.com/skulup/pulserl.svg?branch=master)](https://travis-ci.com/skulup/pulserl)
 [![Language](https://img.shields.io/badge/Language-Erlang-b83998.svg)](https://www.erlang.org/)
 [![LICENSE](https://img.shields.io/badge/License-Apache%202-blue.svg)](https://github.com/skulup/pulserl/blob/master/LICENSE)
