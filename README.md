@@ -3,8 +3,7 @@
 [![Language](https://img.shields.io/badge/Language-Erlang-b83998.svg)](https://www.erlang.org/)
 [![LICENSE](https://img.shields.io/badge/License-Apache%202-blue.svg)](https://github.com/skulup/pulserl/blob/master/LICENSE)
 # Pulserl 
-__An Apache Pulsar client for Erlang/Elixir__
-
+#### An Apache Pulsar client for Erlang/Elixir
 __Version:__ 0.1.0
 
 Pulserl is an Erlang client for the Apache Pulsar Pub/Sub system with both producer and consumer
@@ -15,12 +14,12 @@ to interact with the Pulsar brokers and exposes a very simple API.
 
 The examples assume you have a running Pulsar broker at `localhost:6650`, a topic called `test-topic` (can be partitioned or not) and `rebar3` installed.
 
-__Note: Pulserl uses `pulserl` and `Shared` as the default subscription name and type.
+_Note: Pulserl uses `pulserl` and `Shared` as the default subscription name and type.
  So, if that subscription (not the consumer) under the topic `test-topic` does not exists, we make sure in this example to create it first by creating
- the consumer before producing any message to the topic.__
+ the consumer before producing any message to the topic._
 
 Fetch, compile and start the erlang shell.
-```bash
+```
   git clone https://github.com/skulup/pulserl.git,
   cd pulserl
   rebar3 shell
@@ -54,31 +53,31 @@ In the Erlang shell
 
 ## Feature Matrix
 
--[x] [Basic Producer](http://pulsar.apache.org/docs/en/concepts-messaging/#producers)
--[x] [Basic Consumer](http://pulsar.apache.org/docs/en/concepts-messaging/#consumers)
--[x] [Partitioned topics](http://pulsar.apache.org/docs/en/concepts-messaging/#partitioned-topics)
--[x] [Batching](http://pulsar.apache.org/docs/en/concepts-messaging/#batching)
--[ ]  [Compression](http://pulsar.apache.org/docs/en/concepts-messaging/#compression)
--[x] [TLS](https://pulsar.apache.org/docs/en/security-tls-transport/#tls-overview)
--[ ] [Authentication (token, tls)](https://pulsar.apache.org/docs/en/security-overview/)
--[ ] [Reader API](https://pulsar.apache.org/docs/en/concepts-clients/#reader-interface)
--[x] [Proxy Support (for Kubernetes)](http://pulsar.apache.org/docs/en/concepts-architecture-overview/#pulsar-proxy)
--[x] [Effectively-Once](https://pulsar.apache.org/docs/en/concepts-messaging/#deduplication-and-effectively-once-semantics)
--[ ] [Schema](https://pulsar.apache.org/docs/en/schema-get-started/)
--[x] Consumer seek
--[ ] [Multi-topics consumer](https://pulsar.apache.org/docs/en/concepts-messaging/#multi-topic-subscriptions)
--[ ] [Topics regex consumer](https://github.com/apache/pulsar/wiki/PIP-13:-Subscribe-to-topics-represented-by-regular-expressions)
--[ ] [Compacted topics](https://pulsar.apache.org/docs/en/concepts-topic-compaction/#compaction)
--[x] User defined properties producer/consumer
--[ ] Reader hasMessageAvailable
--[ ] [Hostname verification](https://pulsar.apache.org/docs/en/2.3.1/security-tls-transport/#hostname-verification)
--[ ] [Multi Hosts Service Url support](https://pulsar.apache.org/docs/en/admin-api-overview/#java-admin-client)
--[x] [Key_shared](https://pulsar.apache.org/docs/en/concepts-messaging/#key_shared)
--[ ] key based batcher (didn't find a documentation) ?
--[x] [Negative Acknowledge](https://pulsar.apache.org/docs/en/concepts-messaging/#negative-acknowledgement)
--[x] [Delayed Delivery Messages](https://pulsar.apache.org/docs/en/concepts-messaging/#delayed-message-delivery)
--[x] [Dead Letter Policy](https://pulsar.apache.org/docs/en/concepts-messaging/#dead-letter-topic)
--[ ] [Interceptors](https://github.com/apache/pulsar/wiki/PIP-23:-Message-Tracing-By-Interceptors)
+ - [x] [Basic Producer](http://pulsar.apache.org/docs/en/concepts-messaging/#producers)
+ - [x] [Basic Consumer](http://pulsar.apache.org/docs/en/concepts-messaging/#consumers)
+ - [x] [Partitioned topics](http://pulsar.apache.org/docs/en/concepts-messaging/#partitioned-topics)
+ - [x] [Batching](http://pulsar.apache.org/docs/en/concepts-messaging/#batching)
+ - [ ] [Compression](http://pulsar.apache.org/docs/en/concepts-messaging/#compression)
+ - [x] [TLS](https://pulsar.apache.org/docs/en/security-tls-transport/#tls-overview)
+ - [ ] [Authentication (token, tls)](https://pulsar.apache.org/docs/en/security-overview/)
+ - [ ] [Reader API](https://pulsar.apache.org/docs/en/concepts-clients/#reader-interface)
+ - [x] [Proxy Support (for Kubernetes)](http://pulsar.apache.org/docs/en/concepts-architecture-overview/#pulsar-proxy)
+ - [x] [Effectively-Once](https://pulsar.apache.org/docs/en/concepts-messaging/#deduplication-and-effectively-once-semantics)
+ - [ ] [Schema](https://pulsar.apache.org/docs/en/schema-get-started/)
+ - [x] Consumer seek
+ - [ ] [Multi-topics consumer](https://pulsar.apache.org/docs/en/concepts-messaging/#multi-topic-subscriptions)
+ - [ ] [Topics regex consumer](https://github.com/apache/pulsar/wiki/PIP-13:-Subscribe-to-topics-represented-by-regular-expressions)
+ - [ ] [Compacted topics](https://pulsar.apache.org/docs/en/concepts-topic-compaction/#compaction)
+ - [x] User defined properties producer/consumer
+ - [ ] Reader hasMessageAvailable
+ - [ ] [Hostname verification](https://pulsar.apache.org/docs/en/2.3.1/security-tls-transport/#hostname-verification)
+ - [ ] [Multi Hosts Service Url support](https://pulsar.apache.org/docs/en/admin-api-overview/#java-admin-client)
+ - [x] [Key_shared](https://pulsar.apache.org/docs/en/concepts-messaging/#key_shared)
+ - [ ] key based batcher (didn't find a documentation) ?
+ - [x] [Negative Acknowledge](https://pulsar.apache.org/docs/en/concepts-messaging/#negative-acknowledgement)
+ - [x] [Delayed Delivery Messages](https://pulsar.apache.org/docs/en/concepts-messaging/#delayed-message-delivery)
+ - [x] [Dead Letter Policy](https://pulsar.apache.org/docs/en/concepts-messaging/#dead-letter-topic)
+ - [ ] [Interceptors](https://github.com/apache/pulsar/wiki/PIP-23:-Message-Tracing-By-Interceptors)
  
  _Thanks to Sabudaye for [this information](https://github.com/skulup/pulserl/issues/2#issuecomment-616463542)_
  
