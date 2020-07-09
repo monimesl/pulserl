@@ -100,21 +100,41 @@ logical_to_physical_addresses(Address, TlsEnable) when is_list(Address) ->
       [{Host, Port} || Host <- Addresses]
   end.
 
-resolve_uri(Uri, TlsEnable) ->
-  Uri1 = string:trim(binary_to_list(Uri)),
-  Uri2 = maybe_prepend_scheme(Uri1, TlsEnable),
-  case uri_string:parse(Uri2) of
-    {error, _, _} ->
+resolve_uri(Uri, _TlsEnable) ->
+  Uri1 = trim(binary_to_list(Uri)),
+  case parse_uri(Uri1) of
+    {error, _} ->
       {error, invalid_uri};
-    UriMap ->
-      Host = maps:get(host, UriMap),
+    {Host, Port} ->
       case resolve_address(Host) of
         {error, _} = Err ->
           Err;
         {Hostname, AddressType, Addresses} ->
-          Port = maps:get(port, UriMap),
           {Hostname, Addresses, Port, AddressType}
       end
+  end.
+
+parse_uri(Uri) ->
+  case catch uri_string:parse(Uri) of
+    #{host := Host, port := Port} ->
+      {Host, Port};
+    {error, Reason, Term} ->
+      {error, {Reason, Term}};
+    _ -> %% `uri_string:parse/1` undefined
+      case http_uri:parse(Uri) of
+        {ok, {_Scheme, _UserInfo, Host, Port, _Path, _Query}} ->
+          {Host, Port};
+        Error -> Error
+      end
+  end.
+
+trim(Uri) ->
+  case catch string:trim(Uri) of
+    Uri1 when is_list(Uri1) ->
+      Uri1;
+    _ ->
+      %% `string:trim/1` undefined
+      string:strip(Uri)
   end.
 
 resolve_address(Hostname) ->
@@ -124,7 +144,6 @@ resolve_address(Hostname) ->
     {ok, #hostent{h_name = Host, h_addrtype = AddressType, h_addr_list = Addresses}} ->
       {Host, AddressType, Addresses}
   end.
-
 
 maybe_prepend_scheme(Url, TlsEnable) ->
   case string:str(Url, "//") of
@@ -136,7 +155,6 @@ maybe_prepend_scheme(Url, TlsEnable) ->
       end;
     _ -> Url
   end.
-
 
 get_int_env(Param, Default) when is_integer(Default) ->
   erlwater_env:get_int_env(pulserl, Param, Default).
