@@ -41,7 +41,7 @@ start_client(ServiceUrl, ClientConfig) ->
 %% -------------------------------------------------------------
 start_consumer(Topic) ->
   Options = pulserl_app:def_consumer_options(),
-  start_producer(Topic, Options).
+  start_consumer(Topic, Options).
 
 %%-----------------------------------------------------------------
 %% @doc Starts a consumer using the specified topic and options
