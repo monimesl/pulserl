@@ -7,7 +7,7 @@
 __Version:__ 0.1.0
 
 Pulserl is an Erlang client for the Apache Pulsar Pub/Sub system with both producer and consumer
-implementations. It requires version __2.0+__ of Apache Pulsar and __18.0+__ of Erlang. 
+implementations. It requires a version __2.0+__ of Apache Pulsar and __18.0+__ of Erlang. 
 Pulserl uses the [binary protocol](http://pulsar.apache.org/docs/en/develop-binary-protocol)
 to interact with the Pulsar brokers and exposes a very simple API. 
 ## Quick Examples
@@ -156,13 +156,13 @@ The parent monitor the child processes (internal partitioned producers) for resi
 route client calls to one of the child processes using different 
 [routing modes](https://pulsar.apache.org/docs/en/concepts-messaging/#routing-modes). 
 A producer during initialization is assigned a connection by the client based on its topic metadata.
-The producers uses a queueing mechanism on message sending. 
-Each send is internally a `gen_server.call/2` to the producer process. The caller is added to 
-a queue and replied immediately with `ok.` This initial early reply frees up the caller to do 
+A producer uses a queueing mechanism on message sending. 
+Each send is internally a `gen_server.call/2` to the producer process. The caller's reference is 
+added to a queue and replied immediately with `ok.` This initial early reply frees up the caller to do 
 other tasks if the response is not needed immediately. Internally if message send is trigger, i.e
-when batching is not enable or batching enabled and a batch send is triggered, the producer
+when batching is not enable or batching enabled, but a batch send is triggered, the producer
 asynchronously send (`gen_sever.cast/2`) the message(s) to the `pulserl_conn` process. When the
-connection process receives the response it will `!` send it to associated the producer which in 
+connection process receives the response it will `!` send it to the associated producer which in 
 turn dequeue the associated caller and reply to it.
 The producer provides synchronous and asynchronous send API.
 
@@ -171,8 +171,8 @@ In synchronous mode, the call will wait for the broker to acknowledge the messag
 If the acknowledgment is not received and a `send_timeout` is specified, a `{error, send_timeout}`
 is sent to client on timed out. 
 
-The asynchronous mode provides two API. One returns a `reference()` that will be used to probe 
-for a response or error. The other allows one to pass a callback `fun/1` that will be invoke 
+The asynchronous mode provides two APIs. One returns a `reference()` that will be used to probe 
+for a response or error. The other allows one to pass a callback `fun/1` that will be invoked 
 internally by the producer process when there is a response or error.
 
 #### Starting a producer

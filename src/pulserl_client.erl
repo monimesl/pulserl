@@ -59,19 +59,19 @@ get_broker_connection(LogicalAddress) when is_binary(LogicalAddress) ->
 get_broker_connection(LogicalAddress) when is_list(LogicalAddress) ->
   gen_server:call(?SERVER, {broker_connection, LogicalAddress}).
 
-get_broker_address(TopicName) when is_binary(TopicName) ->
-  get_broker_address(binary_to_list(TopicName));
-get_broker_address(TopicName) when is_list(TopicName) ->
-  Topic = topic_utils:parse(TopicName),
-  get_broker_address(Topic);
+get_broker_address(Topic) when is_binary(Topic) ->
+  get_broker_address(binary_to_list(Topic));
+get_broker_address(Topic) when is_list(Topic) ->
+  Topic2 = topic_utils:parse(Topic),
+  get_broker_address(Topic2);
 get_broker_address(#topic{} = Topic) ->
   gen_server:call(?SERVER, {get_topic_broker, Topic}).
 
-get_partitioned_topic_meta(TopicName) when is_binary(TopicName) ->
-  get_partitioned_topic_meta(binary_to_list(TopicName));
-get_partitioned_topic_meta(TopicName) when is_list(TopicName) ->
-  Topic = topic_utils:parse(TopicName),
-  get_partitioned_topic_meta(Topic);
+get_partitioned_topic_meta(Topic) when is_binary(Topic) ->
+  get_partitioned_topic_meta(binary_to_list(Topic));
+get_partitioned_topic_meta(Topic) when is_list(Topic) ->
+  Topic2 = topic_utils:parse(Topic),
+  get_partitioned_topic_meta(Topic2);
 get_partitioned_topic_meta(#topic{} = Topic) ->
   gen_server:call(?SERVER, {get_partitioned_topic_meta, Topic}).
 
@@ -183,8 +183,8 @@ code_change(_OldVsn, State, _Extra) ->
 %%%===================================================================
 
 get_partitioned_topic_meta(Topic, #state{meta_cnx = MetaCnxPid} = State) ->
-  TopicName = topic_utils:to_string(Topic),
-  Command = commands:new_partitioned_topic_meta(TopicName),
+  TopicStr = topic_utils:to_string(Topic),
+  Command = commands:new_partitioned_topic_meta(TopicStr),
   case pulserl_conn:send_simple_command(MetaCnxPid, Command) of
     #'CommandPartitionedTopicMetadataResponse'{
       response = 'Failed', error = Error, message = Msg} ->
@@ -198,9 +198,9 @@ get_partitioned_topic_meta(Topic, #state{meta_cnx = MetaCnxPid} = State) ->
 
 
 find_broker_address(Topic, #state{meta_cnx = MetaCnxPid} = State) ->
-  TopicName = topic_utils:to_string(Topic),
-  Command = commands:new_lookup_topic(TopicName, false),
-  discover_address(TopicName, Command, MetaCnxPid, State).
+  TopicStr = topic_utils:to_string(Topic),
+  Command = commands:new_lookup_topic(TopicStr, false),
+  discover_address(TopicStr, Command, MetaCnxPid, State).
 
 
 discover_address(Topic, Command, CnxPid, State) ->

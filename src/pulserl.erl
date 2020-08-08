@@ -50,11 +50,7 @@ start_consumer(Topic) ->
     Topic :: topic(),
     Options :: producer_options()) -> {ok, pid()} | {error, term()}).
 start_consumer(Topic, Options) ->
-  Topic2 =
-    case Topic of
-      #topic{} -> Topic;
-      _ -> topic_utils:parse(Topic)
-    end,
+  Topic2 = topic_utils:parse(Topic),
   pulserl_consumer:create(Topic2, Options).
 
 %%--------------------------------------------------------------
@@ -72,11 +68,7 @@ start_producer(Topic) ->
     Topic :: topic(),
     Options :: producer_options()) -> {ok, pid()} | {error, term()}).
 start_producer(Topic, Options) ->
-  Topic2 =
-    case Topic of
-      #topic{} -> Topic;
-      _ -> topic_utils:parse(Topic)
-    end,
+  Topic2 = topic_utils:parse(Topic),
   pulserl_producer:create(Topic2, Options).
 
 

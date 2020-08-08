@@ -26,22 +26,22 @@
 
 -define(SERVER, ?MODULE).
 
-get_consumer(TopicName, Options) ->
-  Topic = topic_utils:parse(TopicName),
-  case ets:lookup(pulserl_consumers, topic_utils:to_string(Topic)) of
+get_consumer(Topic, Options) ->
+  Topic2 = topic_utils:parse(Topic),
+  case ets:lookup(pulserl_consumers, topic_utils:to_string(Topic2)) of
     [] ->
-      gen_server:call(?SERVER, {new_consumer, Topic, Options}, 32000);
+      gen_server:call(?SERVER, {new_consumer, Topic2, Options}, 32000);
     Producers ->
       {_, Pid} = erlwater_collection:random_select(Producers),
       {ok, Pid}
   end.
 
 
-get_producer(TopicName, Options) ->
-  Topic = topic_utils:parse(TopicName),
-  case ets:lookup(pulserl_producers, topic_utils:to_string(Topic)) of
+get_producer(Topic, Options) ->
+  Topic2 = topic_utils:parse(Topic),
+  case ets:lookup(pulserl_producers, topic_utils:to_string(Topic2)) of
     [] ->
-      gen_server:call(?SERVER, {new_producer, Topic, Options}, 32000);
+      gen_server:call(?SERVER, {new_producer, Topic2, Options}, 32000);
     Consumers ->
       {_, Pid} = erlwater_collection:random_select(Consumers),
       {ok, Pid}
@@ -67,9 +67,9 @@ handle_call({new_consumer, Topic, Options}, _From, State) ->
           %% pulserl:consumer/1, sometimes the call returns without
           %% consuming any messages. This is actually due to the fact
           %% after the new consumer has been initialized, the message
-          %% load is asynchronous. Sleeping here a bit, will increases
-          %% the chances of having the message(s) arrived before we return
-          %% the consumer pid to the client. This is just a hack
+          %% load is asynchronous. Sleeping here a bit, will increase
+          %% the chance of having the message(s) arrived before we
+          %% return the consumer pid to the client. This is just a hack
           timer:sleep(300),
           Res;
         Other ->

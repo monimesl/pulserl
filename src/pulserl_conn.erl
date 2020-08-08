@@ -195,9 +195,9 @@ handle_info({'DOWN', MonitorRef, process, MonitoredPid, _}, State) ->
   NewState =
     %% Remove the dead process from the waiters registry
   case dict:take(MonitorRef, State#state.waiter_monitor2Id) of
-    {WaiterId, NewWaiter_monitor2Id} ->
+    {WaiterId, NewWaiterMonitor2Id} ->
       NewWaiters = dict:erase(WaiterId, State#state.waiters),
-      State#state{waiters = NewWaiters, waiter_monitor2Id = NewWaiter_monitor2Id};
+      State#state{waiters = NewWaiters, waiter_monitor2Id = NewWaiterMonitor2Id};
     _ ->
       %% Oops!! The dead process is a consumer/producer, remove it.
       RemovalFun = fun(_, Pid) -> MonitoredPid /= Pid end,

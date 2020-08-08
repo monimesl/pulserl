@@ -643,13 +643,13 @@ update_pending_count_across_partitions(
     #state{topic = Topic}, Increment) ->
   if Topic#topic.parent /= ?UNDEF ->
     %% this is a producer to one of the partition
-    TopicName = topic_utils:to_string(Topic#topic.parent),
+    TopicStr = topic_utils:to_string(Topic#topic.parent),
     Update =
       if Increment < 0 ->
         {2, Increment, 0, 0};
         true -> {2, Increment}
       end,
-    ets:update_counter(partition_pending_messages, TopicName, Update, {TopicName, 0});
+    ets:update_counter(partition_pending_messages, TopicStr, Update, {TopicStr, 0});
     true ->
       -1 %% Make sure it's below zero for non partitioned topics
   end.
