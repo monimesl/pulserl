@@ -87,16 +87,14 @@ decode_command(Data) when is_binary(Data) ->
         {pulsar_api:decode_msg(Command, 'BaseCommand'), HeadersAndPayload0}
     end,
   %% Sometimes a PING is embedded
-  %% together with other type response
+  %% together with other type command
   %% in a `BaseCommand` message. I've seen it
   ['BaseCommand', _Type | WrappedCommands] =
     lists:filter(
       fun(Val) -> Val /= undefined end,
       tuple_to_list(BaseCommand)
     ),
-  %% Anyway, pick the lucky first.
-  %% @Todo, return the list and handle each
-  {hd(WrappedCommands), HeadersAndPayload}.
+  {WrappedCommands, HeadersAndPayload}.
 
 decode_metadata(HeadersAndPayload) ->
   case verify_checksum(HeadersAndPayload) of

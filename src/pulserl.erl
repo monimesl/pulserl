@@ -16,9 +16,10 @@
 -export([start_consumer/1, start_consumer/2]).
 -export([start_producer/1, start_producer/2]).
 -export([produce/2, produce/3, sync_produce/2, sync_produce/3]).
--export([consume/1, ack/1, ack/2, ack_cumulative/1, ack_cumulative/2, negative_ack/1, negative_ack/2]).
+-export([consume/1, ack/1, ack/2, c_ack/1, c_ack/2, nack/1, nack/2]).
+-export([ack_cumulative/1, ack_cumulative/2, negative_ack/1, negative_ack/2]).
 
-%% Expose for demo
+%% Expose for demo purposes
 -export([start_consumption_in_background/1]).
 
 
@@ -176,15 +177,31 @@ ack(#consMessage{consumer = Pid, id = Id}) ->
 ack(Pid, #messageId{} = Id) when is_pid(Pid) ->
   pulserl_consumer:ack(Pid, Id, false).
 
+c_ack(#consMessage{consumer = Pid, id = Id}) ->
+  pulserl:c_ack(Pid, Id).
+
+c_ack(Pid, #messageId{} = Id) when is_pid(Pid) ->
+  pulserl_consumer:ack(Pid, Id, true).
+
+nack(#consMessage{consumer = Pid, id = Id}) ->
+  pulserl:negative_ack(Pid, Id).
+
+nack(Pid, #messageId{} = Id) when is_pid(Pid) ->
+  pulserl_consumer:nack(Pid, Id).
+
+%% @deprecated
 ack_cumulative(#consMessage{consumer = Pid, id = Id}) ->
   pulserl:ack_cumulative(Pid, Id).
 
+%% @deprecated
 ack_cumulative(Pid, #messageId{} = Id) when is_pid(Pid) ->
   pulserl_consumer:ack(Pid, Id, true).
 
+%% @deprecated
 negative_ack(#consMessage{consumer = Pid, id = Id}) ->
   pulserl:negative_ack(Pid, Id).
 
+%% @deprecated
 negative_ack(Pid, #messageId{} = Id) when is_pid(Pid) ->
   pulserl_consumer:negative_ack(Pid, Id).
 

@@ -17,7 +17,7 @@
 -export([start_link/2]).
 %% Consumer API
 -export([create/2, close/1, close/2]).
--export([ack/3, negative_ack/2, seek/2, receive_message/1, redeliver_unack_messages/1]).
+-export([ack/3, nack/2, negative_ack/2, seek/2, receive_message/1, redeliver_unack_messages/1]).
 
 %% gen_server callbacks
 -export([init/1,
@@ -62,6 +62,10 @@ receive_message(Pid) ->
 ack(Pid, #'messageId'{} = MessageId, Cumulative) when is_pid(Pid) ->
   call_associated_consumer(Pid, {acknowledge, MessageId, Cumulative}).
 
+nack(Pid, #messageId{} = MessageId) ->
+  call_associated_consumer(Pid, {negative_acknowledge, MessageId}).
+
+%% @deprecated
 negative_ack(Pid, #messageId{} = MessageId) ->
   call_associated_consumer(Pid, {negative_acknowledge, MessageId}).
 

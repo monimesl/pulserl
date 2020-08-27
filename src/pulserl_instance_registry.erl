@@ -59,19 +59,24 @@ init([]) ->
 handle_call({new_consumer, Topic, Options}, _From, State) ->
   case ets:lookup(pulserl_consumers, topic_utils:to_string(Topic)) of
     [] ->
-      Reply = pulserl:start_consumer(Topic, Options),
-      case Reply of
-        {ok, _Pid} = Res ->
-          %% If the broker has some unAck/unsent messages
-          %% and the consumer is created for the first time via
-          %% pulserl:consumer/1, sometimes the call returns without
-          %% consuming any messages. This is actually due to the fact
-          %% after the new consumer has been initialized, the message
-          %% load is asynchronous. Sleeping here a bit, will increase
-          %% the chance of having the message(s) arrived before we
-          %% return the consumer pid to the client. This is just a hack
-          timer:sleep(300),
-          Res;
+      Reply =
+        case pulserl:start_consumer(Topic, Options) of
+          {ok, Pid} = Res ->
+            %% Normally, this process will eventually update its topic-consumer
+            %% index from the `consumer_up` message sent from the started consumer.
+            %% However, if rely on that in this case, we may suffer from race condition.
+            %% Hence, we update the index immediately here
+            update_topic_consumer_index(Topic, Pid, true),
+            %% If the broker has some unAck/unsent messages
+            %% and the consumer is created for the first time via
+            %% pulserl:consumer/1, sometimes the call returns without
+            %% consuming any messages. This is actually due to the fact
+            %% after the new consumer has been initialized, the message
+            %% load is asynchronous. Sleeping here a bit, will increase
+            %% the chance of having the message(s) arrived before we
+            %% return the consumer pid to the client. This is just a hack :)
+            timer:sleep(300),
+            Res;
         Other ->
           Other
       end,
@@ -84,7 +89,19 @@ handle_call({new_consumer, Topic, Options}, _From, State) ->
 handle_call({new_producer, Topic, Options}, _From, State) ->
   case ets:lookup(pulserl_producers, topic_utils:to_string(Topic)) of
     [] ->
-      {reply, pulserl:start_producer(Topic, Options), State};
+      Reply =
+        case pulserl:start_producer(Topic, Options) of
+          {ok, Pid} = Res ->
+            %% Normally, this process will eventually update its topic-producer
+            %% index from the `producer_up` message sent from the started consumer.
+            %% However, if rely on that in this case, we may suffer from race condition.
+            %% Hence, we update the index immediately here
+            update_topic_producer_index(Topic, Pid, true),
+            Res;
+          Other ->
+            Other
+        end,
+      {reply, Reply, State};
     Producers ->
       {_, Pid} = erlwater_collection:random_select(Producers),
       {reply, {ok, Pid}, State}
@@ -97,17 +114,17 @@ handle_cast(_Request, State) ->
   {noreply, State}.
 
 handle_info({producer_up, ProducerPid, Topic}, State) ->
-  ets:insert(pulserl_producers, {topic_utils:to_string(Topic), ProducerPid}),
+  update_topic_producer_index(Topic, ProducerPid, true),
   {noreply, State};
 handle_info({producer_down, ProducerPid, Topic}, State) ->
-  ets:delete_object(pulserl_producers, {topic_utils:to_string(Topic), ProducerPid}),
+  update_topic_producer_index(Topic, ProducerPid, false),
   {noreply, State};
 
-handle_info({consumer_up, ProducerPid, Topic}, State) ->
-  ets:insert(pulserl_consumers, {topic_utils:to_string(Topic), ProducerPid}),
+handle_info({consumer_up, ConsumerPid, Topic}, State) ->
+  update_topic_consumer_index(Topic, ConsumerPid, true),
   {noreply, State};
-handle_info({consumer_down, ProducerPid, Topic}, State) ->
-  ets:delete_object(pulserl_consumers, {topic_utils:to_string(Topic), ProducerPid}),
+handle_info({consumer_down, ConsumerPid, Topic}, State) ->
+  update_topic_consumer_index(Topic, ConsumerPid, false),
   {noreply, State};
 
 handle_info(Info, State) ->
@@ -124,3 +141,19 @@ code_change(_OldVsn, State, _Extra) ->
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
+
+update_topic_consumer_index(Topic, ConsumerPid, Insert) ->
+  Topic2 = topic_utils:to_string(Topic),
+  if Insert ->
+    ets:insert(pulserl_consumers, {Topic2, ConsumerPid});
+    true ->
+      ets:delete_object(pulserl_consumers, {Topic2, ConsumerPid})
+  end.
+
+update_topic_producer_index(Topic, ProducerPid, Insert) ->
+  Topic2 = topic_utils:to_string(Topic),
+  if Insert ->
+    ets:insert(pulserl_producers, {Topic2, ProducerPid});
+    true ->
+      ets:delete_object(pulserl_producers, {Topic2, ProducerPid})
+  end.

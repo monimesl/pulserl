@@ -230,9 +230,12 @@ parse_buffer_data(State) ->
       State;
     {Frame, NewBuffer} ->
       State2 = State#state{data_buffer = NewBuffer},
-      {Command, HeaderAndPayload} = pulserl_io:decode_command(Frame),
-      State3 = handle_command(Command, HeaderAndPayload, State2),
-      parse_buffer_data(State3)
+      {Commands, HeaderAndPayload} = pulserl_io:decode_command(Frame),
+      State4 = lists:foldl(
+        fun(Command, State3) ->
+          handle_command(Command, HeaderAndPayload, State3)
+        end, State2, Commands),
+      parse_buffer_data(State4)
   end.
 
 handle_command(Command, HeadersAndPayload, State) ->
@@ -261,7 +264,7 @@ handle_command(Command, HeadersAndPayload, State) ->
       handle_message(Command, HeadersAndPayload, State);
     _ ->
       error_logger:error_msg("No handler is implemeted to handle the "
-      "command: ~p with header and payload [~p]", [Command, HeadersAndPayload]),
+      "command: ~p with header&payload: ~p", [Command, HeadersAndPayload]),
       State
   end.
 
@@ -293,7 +296,7 @@ handle_send_error(#'CommandSendError'{
       safe_send(Pid, {send_error, SequenceId, {error, {Error, Message}}});
       (_) ->
         error_logger:warning_msg("The producer with id: ~p "
-        "not found when when send failed", [ProdId])
+        "not found when send failed", [ProdId])
     end).
 
 handle_producer_success(#'CommandProducerSuccess'{
@@ -370,8 +373,8 @@ fetch_producer_by_id(ProducerId, State, Callback) ->
 
 send_reply_to_all_request_waiters(Reply, State) ->
   lists:foldl(
-    fun(RequestId, State0) ->
-      send_reply_to_request_waiter(RequestId, Reply, State0)
+    fun(WaiterId, State0) ->
+      send_reply_to_request_waiter(WaiterId, Reply, State0)
     end, State, dict:fetch_keys(State#state.waiters)).
 
 send_reply_to_request_waiter(WaiterId, Reply, State) ->
@@ -521,7 +524,7 @@ perform_handshake(#state{socket = Socket, socket_module = SockMod} = State) ->
     {_, _, NewState} ->
       case SockMod:recv(Socket, 0) of
         {ok, Data} ->
-          {Command, _} = pulserl_io:decode_command(Data),
+          {[Command | _], _} = pulserl_io:decode_command(Data),
           case Command of
             #'CommandConnected'{
               server_version = ServerVsn,

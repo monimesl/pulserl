@@ -227,7 +227,7 @@ A sample start producer API code:
 ```erlang
 Message = <<"message">>,
 Topic = topic_utils:parse("test-topic"),
-pulserl:produce(Topic, Message).
+pulserl:sync_produce(Topic, Message).
 ```
 
 ### Consumer
@@ -266,7 +266,6 @@ A sample start consumer API code:
 
 On the start, every consumer process automatically sends [subscription command](https://pulsar.apache.org/docs/en/2.6.0/develop-binary-protocol/#consumer) to the broker, with [shared](https://pulsar.apache.org/docs/en/2.6.0/concepts-messaging/#shared) subscription type as default.
 After subscribtion command consumers sends the [flow command](https://pulsar.apache.org/docs/en/2.6.0/develop-binary-protocol/#flow-control) with the value of the consumer's message queue(`not Erlang process's`) len. At every point, the number of messages in the queue is <= `queue_size` and are readily available for upstream consumption. The consumer will resend a new flow permits every time the queue's size reaches the specified `queue_refill_threshold` (default to 50% of `queue_size`).
-
 To receive a message `pulserl:consume/1` should be used in a loop, for example:
 
 ```erlang
@@ -283,9 +282,9 @@ receive_message(PidOrTopic) ->
 ```
 where `PidOrTopic` is a pid of parent consumer process returned by `pulserl:start_consumer/1,2` or a topic name.
 
-Each received message should be [acknowledged](https://pulsar.apache.org/docs/en/concepts-messaging/#acknowledgement) with `pulserl:ack/1`.
-`pulsar:negative_ack/2` could be used to ask the broker for [redelivering of the message](https://pulsar.apache.org/docs/en/concepts-messaging/#negative-acknowledgement), but it should be send before [acknowledgement timeout](https://pulsar.apache.org/docs/en/concepts-messaging/#acknowledgement-timeout) which is disabled by default.
-
+Each received message should be [acknowledged](https://pulsar.apache.org/docs/en/concepts-messaging/#acknowledgement) with `pulserl:ack/1,2`.
+`pulsar:nack/1,2` could be used to ask the broker for [redelivering of the message](https://pulsar.apache.org/docs/en/concepts-messaging/#negative-acknowledgement), but it should be send before [acknowledgement timeout](https://pulsar.apache.org/docs/en/concepts-messaging/#acknowledgement-timeout) which is disabled by default.
+To redeliver all the unacknowledged messages, one can use the `pulserl_consumer:redeliver_unack_messages/1` API
 
 ## Contribute
 
