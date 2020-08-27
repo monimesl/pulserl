@@ -1,5 +1,5 @@
 %%%-------------------------------------------------------------------
-%%% @author Alpha Umaru Shaw <shawalpha5@gmail.com>, 
+%%% @author Alpha Umaru Shaw <shawalpha5@gmail.com>,
 %%% @doc
 %%%
 %%% @end
