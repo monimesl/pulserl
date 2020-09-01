@@ -16,7 +16,7 @@ services:
         target: /pulsar/certs
     environment:
       - tlsEnabled=true
-      - brokerServicePortTls=6651
+      - PULSAR_PREFIX_brokerServicePortTls=6651
       - PULSAR_PREFIX_webServicePortTls=8443
       - tlsAllowInsecureConnection=false
       - tlsRequireTrustedClientCertOnConnect=false

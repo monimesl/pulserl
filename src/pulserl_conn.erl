@@ -503,6 +503,7 @@ connect_to_broker(#state{
   socket_module = SockMod,
   connect_timeout = ConnectTimeout} = State, IpAddress, Port) ->
   TcpOptions = [binary, {active, false} | State#state.tcp_options],
+  error_logger:info_msg("Connecting to broker ~s:~p", [erlwater_net:ip_to_binary(IpAddress), Port]),
   case SockMod:connect(IpAddress, Port, TcpOptions, ConnectTimeout) of
     {ok, Socket} ->
       {ok, State#state{
