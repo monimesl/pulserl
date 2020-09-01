@@ -6,9 +6,23 @@ services:
     image: apachepulsar/pulsar:2.5.2
     ports:
       - "6650:6650"
+      - "6651:6651"
+      - "8443:8443"
     networks:
       - pulsar
+    volumes:
+      - type: bind
+        source: ./config/certs
+        target: /pulsar/certs
     environment:
+      - tlsEnabled=true
+      - brokerServicePortTls=6651
+      - PULSAR_PREFIX_webServicePortTls=8443
+      - tlsAllowInsecureConnection=false
+      - tlsRequireTrustedClientCertOnConnect=false
+      - tlsCertificateFilePath=/pulsar/certs/broker.cert.pem
+      - tlsKeyFilePath=/pulsar/certs/broker.key-pk8.pem
+      - tlsTrustCertsFilePath=/pulsar/certs/ca.cert.pem
       - PULSAR_MEM=" -Xms512m -Xmx512m -XX:MaxDirectMemorySize=1g"
     command: >
       /bin/bash -c

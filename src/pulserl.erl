@@ -231,9 +231,9 @@ start_consumption_in_background(TopicOrPid) ->
 
 do_consume(PidOrTopic) ->
   case consume(PidOrTopic) of
-    #consMessage{value = Value} = ConsumedMsg ->
+    #consMessage{id = Id, value = Value} = ConsumedMsg ->
       _ = ack(ConsumedMsg),
-      io:format("Consumer Received: ~p~n", [Value]);
+      io:format("Consumer Received: ~p. Id(~p)~n", [Value, Id]);
     ?ERROR_CLIENT_NOT_STARTED ->
       error(?ERROR_CLIENT_NOT_STARTED);
     {error, Reason} ->
