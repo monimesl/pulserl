@@ -1,6 +1,6 @@
 {application, pulserl,
   [{description, "Apache Pulsar binary protocol API client written in Erlang"},
-    {vsn, "0.1.2"},
+    {vsn, "0.1.3"},
     {registered, []},
     {mod, {pulserl_app, []}},
     {applications,
