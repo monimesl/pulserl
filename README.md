@@ -270,7 +270,7 @@ To receive a message `pulserl:consume/1` should be used in a loop, for example:
 
 ```erlang
 receive_message(PidOrTopic) ->
-  case pulserl:consume(Pid) of
+  case pulserl:consume(PidOrTopic) of
     #consMessage{} = ConsumerMsg ->
       pulserl:ack(ConsumerMsg),
       ConsumerMsg;
