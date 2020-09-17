@@ -234,16 +234,20 @@ discover_address(Topic, Command, CnxPid, State) ->
   end.
 
 get_connection_to_one_of_these_logical_addresses([LogicalAddress | Rest], State) ->
-  PhysicalAddresses = pulserl_utils:logical_to_physical_addresses(LogicalAddress, State#state.tls_enable),
-  case get_connection(PhysicalAddresses, LogicalAddress, State) of
+  case pulserl_utils:logical_to_physical_addresses(LogicalAddress, State#state.tls_enable) of
     {error, _} = Error ->
-      if Rest /= [] ->
-        get_connection_to_one_of_these_logical_addresses(Rest, State);
-        true ->
-          Error
-      end;
-    Result ->
-      Result
+      Error;
+    PhysicalAddresses ->
+      case get_connection(PhysicalAddresses, LogicalAddress, State) of
+        {error, _} = Error ->
+          if Rest /= [] ->
+            get_connection_to_one_of_these_logical_addresses(Rest, State);
+            true ->
+              Error
+          end;
+        Result ->
+          Result
+      end
   end.
 
 get_connection([], LogicalAddress, State) ->

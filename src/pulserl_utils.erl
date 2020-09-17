@@ -93,7 +93,7 @@ to_logical_address(Hostname, Port, TlsEnable) ->
 logical_to_physical_addresses(Address, TlsEnable) when is_list(Address) ->
   case resolve_uri(list_to_binary(Address), TlsEnable) of
     {error, Reason} ->
-      error({bad_address, Reason});
+      {error, {Reason, Address}};
     {_, Addresses, Port, _} ->
       [{Host, Port} || Host <- Addresses]
   end.

@@ -482,8 +482,12 @@ do_reconnect(State) ->
   end.
 
 create_connection(#state{logical_address = LogicalAddress, socket_module = SockMod} = State) ->
-  Addresses = pulserl_utils:logical_to_physical_addresses(LogicalAddress, SockMod == ssl),
-  connect_to_brokers(State, Addresses).
+  case pulserl_utils:logical_to_physical_addresses(LogicalAddress, SockMod == ssl) of
+    {error, _} = Error ->
+      Error;
+    Addresses ->
+      connect_to_brokers(State, Addresses)
+  end.
 
 
 connect_to_brokers(State, [{IpAddress, Port} | Rest]) ->
