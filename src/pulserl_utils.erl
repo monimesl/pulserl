@@ -11,6 +11,7 @@
 -include("pulsar_api.hrl").
 -include_lib("kernel/include/inet.hrl").
 
+-export([get_client_version/0, proxy_to_broker_url_env/0]).
 -export([new_message_id/2, new_message_id/4, new_message/5, new_message/6]).
 -export([tls_enable/1, hash/2, get_int_env/2, get_env/2, resolve_uri/2, to_logical_address/3, sock_address_to_string/2, logical_to_physical_addresses/2]).
 
@@ -160,3 +161,9 @@ get_int_env(Param, Default) when is_integer(Default) ->
 
 get_env(Param, Default) ->
   erlwater_env:get_env(pulserl, Param, Default).
+
+proxy_to_broker_url_env() ->
+  erlwater_env:get_env(pulserl, proxy_to_broker_url, undefined).
+
+get_client_version() ->
+  "pulserl-" ++ element(3, lists:keyfind(pulserl, 1, application:loaded_applications())).

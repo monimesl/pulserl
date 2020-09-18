@@ -543,7 +543,7 @@ perform_handshake(#state{socket = Socket, socket_module = SockMod} = State) ->
             #'CommandError'{
               error = Error, message = ErrorMessage
             } ->
-              {error, Error, ErrorMessage}
+              {error, {Error, ErrorMessage}}
           end;
         {error, Reason} ->
           error_logger:error_msg("Error making the connect handsake. Reason: ~p", [Reason]),

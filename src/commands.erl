@@ -15,8 +15,6 @@
 -export([new_send/8, new_ack/2, new_ack/3, new_seek/2, new_connect/0]).
 -export([new_lookup_topic/2, new_partitioned_topic_meta/1, new_redeliver_unack_messages/2]).
 
--define(CLIENT_VSN, "0.1.0").
-
 has_messages_in_batch(#'MessageMetadata'{num_messages_in_batch = NumOfBatchMessages}) ->
   is_number(NumOfBatchMessages).
 
@@ -94,8 +92,9 @@ new_redeliver_unack_messages(ConsumerId, MessageIds) when is_list(MessageIds) ->
 
 new_connect() ->
   #'CommandConnect'{
-    client_version = ?CLIENT_VSN,
-    protocol_version = 6
+    protocol_version = 10,
+    client_version = pulserl_utils:get_client_version(),
+    proxy_to_broker_url = pulserl_utils:proxy_to_broker_url_env()
   }.
 
 new_partitioned_topic_meta(Topic) ->
