@@ -90,14 +90,14 @@ produce(PidOrTopic, Message) ->
 %%--------------------------------------------------------------------
 produce(PidOrTopic, Value, Callback) when
   (is_list(Value) or is_binary(Value)) andalso
-    (is_function(Callback) or Callback == ?UNDEF) ->
+    (is_function(Callback) orelse Callback == ?UNDEF) ->
   produce(PidOrTopic, pulserl_producer:new_message(Value), Callback);
 
 %%--------------------------------------------------------------------
 %% @doc publish a message asynchronously
 %%--------------------------------------------------------------------
 produce(PidOrTopic, Key, Value) when
-  (Key == ?UNDEF or is_list(Key) or is_binary(Key)) andalso
+  (Key == ?UNDEF orelse is_list(Key) orelse is_binary(Key)) andalso
     (is_list(Value) or is_binary(Value)) ->
   produce(PidOrTopic, pulserl_producer:new_message(Key, Value), ?UNDEF);
 
@@ -134,7 +134,7 @@ sync_produce(Pid, #prodMessage{} = Msg) ->
 %% @doc publish a message synchronously
 %%--------------------------------------------------------------------
 sync_produce(PidOrTopic, Key, Value) when
-  (Key == ?UNDEF or is_list(Key) or is_binary(Key)) andalso
+  (Key == ?UNDEF orelse is_list(Key) orelse is_binary(Key)) andalso
     (is_list(Value) or is_binary(Value)) ->
   sync_produce(PidOrTopic, pulserl_producer:new_message(Key, Value));
 
