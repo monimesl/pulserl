@@ -1,13 +1,9 @@
-%%%-------------------------------------------------------------------
-%%% @author Alpha Umaru Shaw <shawalpha5@gmail.com>
-%%% @doc
-%%%
-%%% @end
-%%% Company: Skulup Ltd
-%%% Copyright: (C) 2020
-%%%-------------------------------------------------------------------
+%%%------------------------------------------------------
+%%%    Copyright 2022 Monime Ltd, licensed under the
+%%%    Apache License, Version 2.0 (the "License");
+%%%-------------------------------------------------------
 -module(pulserl_io).
--author("Alpha Umaru Shaw").
+-author("Alpha Umaru Shaw <shawalpha5@gmail.com>").
 
 -include("pulsar_api.hrl").
 

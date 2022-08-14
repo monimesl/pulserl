@@ -1,10 +1,7 @@
-%%%-------------------------------------------------------------------
-%%% @author Alpha Umaru Shaw <shawalpha5@gmail.com>
-%%% @doc
-%%%
-%%% @end
-%%% Copyright: (C) 2020, Skulup Ltd
-%%%-------------------------------------------------------------------
+%%%------------------------------------------------------
+%%%    Copyright 2022 Monime Ltd, licensed under the
+%%%    Apache License, Version 2.0 (the "License");
+%%%-------------------------------------------------------
 
 -define(UNDEF, undefined).
 -define(ERROR_CLIENT_NOT_STARTED, {error, client_not_started}).

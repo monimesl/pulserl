@@ -1,3 +1,8 @@
+%%%------------------------------------------------------
+%%%    Copyright 2022 Monime Ltd, licensed under the
+%%%    Apache License, Version 2.0 (the "License");
+%%%-------------------------------------------------------
+
 -module(pulserl_SUITE).
 
 -author("Stanislav Sabudaye").
@@ -41,7 +46,7 @@ produce_after(Topic, Message, Seconds) ->
   spawn(fun() ->
     timer:sleep(Seconds * 1000),
     pulserl:produce(Topic, Message)
-  end).
+        end).
 
 do_consume(Topic, Message) ->
   case pulserl:consume(Topic) of
